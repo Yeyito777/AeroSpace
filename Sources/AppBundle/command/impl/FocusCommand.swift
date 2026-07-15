@@ -34,13 +34,13 @@ struct FocusCommand: Command {
                 }
             case .windowId(let windowId):
                 if let windowToFocus = Window.get(byId: windowId) {
-                    return .from(bool: windowToFocus.focusWindow())
+                    return focusExplicitly(windowToFocus)
                 } else {
                     return .fail(io.err("Can't find window with ID \(windowId)"))
                 }
             case .dfsIndex(let dfsIndex):
                 if let windowToFocus = target.workspace.rootTilingContainer.allLeafWindowsRecursive.getOrNil(atIndex: Int(dfsIndex)) {
-                    return .from(bool: windowToFocus.focusWindow())
+                    return focusExplicitly(windowToFocus)
                 } else {
                     return .fail(io.err("Can't find window with DFS index \(dfsIndex)"))
                 }
@@ -64,6 +64,16 @@ struct FocusCommand: Command {
                 return .from(bool: windows[targetIndex].focusWindow())
         }
     }
+}
+
+@MainActor
+private func focusExplicitly(_ window: Window) -> BinaryExitCode {
+    guard window.focusWindow() else { return .fail }
+    // An exact target is explicit user intent. Reassert native focus even when
+    // the AeroSpace model already points at this window; model registration can
+    // precede macOS key-window focus for newly created windows.
+    window.nativeFocus()
+    return .succ
 }
 
 @MainActor private func hitWorkspaceBoundaries(

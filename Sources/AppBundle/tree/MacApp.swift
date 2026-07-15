@@ -1,6 +1,13 @@
 import AppKit
 import Common
 
+func canFocusByActivatingAppOnly(
+    lastNativeFocusedWindowId: UInt32?,
+    targetWindowId: UInt32,
+) -> Bool {
+    lastNativeFocusedWindowId == targetWindowId
+}
+
 // Potential alternative implementation
 // https://github.com/swiftlang/swift-evolution/blob/main/proposals/0392-custom-actor-executors.md
 // (only available since macOS 14)
@@ -12,7 +19,6 @@ final class MacApp: AbstractApp {
     private let axApp: ThreadGuardedValue<AXUIElement>
     private let appAxSubscriptions: ThreadGuardedValue<[AxSubscription]> // keep subscriptions in memory
     private let windows: ThreadGuardedValue<[UInt32: AxWindow]> = .init([:])
-    private var windowsCount = 0
     var lastNativeFocusedWindowId: UInt32? = nil
     private var thread: Thread?
     private var setFrameJobs: [UInt32: RunLoopJob] = [:]
@@ -134,9 +140,15 @@ final class MacApp: AbstractApp {
         MacApp.focusJob?.cancel()
         // Performance optimization. If possible avoid doing AX requests
         // (important for apps which are slow at responding even such basic AX requests. E.g. Godot)
+        // Activation alone is safe only after AX has confirmed the target as
+        // this app's native focused window. A fresh single-window app can
+        // publish a non-key window, so it still needs the main/raise actions.
         // Beware of the macOS bug: https://github.com/nikitabobko/AeroSpace/issues/101
         if (!NSScreen.screensHaveSeparateSpaces || monitors.count == 1) &&
-            (lastNativeFocusedWindowId == windowId || windowsCount == 1)
+            canFocusByActivatingAppOnly(
+                lastNativeFocusedWindowId: lastNativeFocusedWindowId,
+                targetWindowId: windowId,
+            )
         {
             nsApp.activate(options: .activateIgnoringOtherApps)
         } else {
@@ -347,7 +359,6 @@ final class MacApp: AbstractApp {
             windows.threadGuarded = alive
             return (Array(alive.keys), Array(dead.keys))
         }
-        windowsCount = alive.count
         for windowId in dead {
             setFrameJobs.removeValue(forKey: windowId)?.cancel()
         }
