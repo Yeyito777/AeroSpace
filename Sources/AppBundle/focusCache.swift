@@ -154,6 +154,14 @@ private func updateLastNativeFocusedWindow(_ window: Window?) {
     (window as? MacWindow)?.macApp.lastNativeFocusedWindowId = window?.windowId
 }
 
+@MainActor
+private func reassertIntendedNativeFocus() {
+    deferredNativeFocusTask?.cancel()
+    let intendedFocus = focus
+    syncFocusToMacOs(intendedFocus)
+    lastKnownNativeFocusedWindowId = intendedFocus.windowOrNil?.windowId
+}
+
 /// The data should flow (from nativeFocused to focused) and
 ///                      (from nativeFocused to lastKnownNativeFocusedWindowId)
 /// Alternative names: takeFocusFromMacOs, syncFocusFromMacOs
@@ -183,20 +191,16 @@ private func updateLastNativeFocusedWindow(_ window: Window?) {
         currentWorkspaceName: currentWorkspaceName,
         nativeWorkspaceName: nativeWorkspaceName,
     ) {
-        deferredNativeFocusTask?.cancel()
-        if let intendedFocus = focus.windowOrNil {
-            intendedFocus.nativeFocus()
-            lastKnownNativeFocusedWindowId = intendedFocus.windowId
-            updateLastNativeFocusedWindow(intendedFocus)
-        }
+        reassertIntendedNativeFocus()
         return
     } else if raceProtection.shouldSuppressAfterClose(
         currentWorkspaceName: currentWorkspaceName,
         nativeWorkspaceName: nativeWorkspaceName,
     ) {
-        deferredNativeFocusTask?.cancel()
-        lastKnownNativeFocusedWindowId = nativeFocused.windowId
-        updateLastNativeFocusedWindow(nativeFocused)
+        // Suppression must also repair native focus. Merely ignoring macOS's
+        // replacement leaves that hidden-workspace app frontmost, and a later
+        // refresh can mistake the stale replacement for user intent.
+        reassertIntendedNativeFocus()
         return
     } else if let delay = raceProtection.appActivationDelay(
         appPid: appPid,

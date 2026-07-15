@@ -18,14 +18,14 @@ func requestNativeFocusSync() {
 }
 
 @MainActor
-private func syncFocusToMacOs(_ target: LiveFocus) {
+func syncFocusToMacOs(_ target: LiveFocus) {
     if let window = target.windowOrNil {
         window.nativeFocus()
     } else {
         // AeroSpace workspaces are virtual. Owning native focus while an empty
         // workspace is active prevents macOS from surfacing an app whose
         // windows belong to a hidden workspace.
-        NSRunningApplication.current.activate(options: .activateIgnoringOtherApps)
+        NSApp.activate(ignoringOtherApps: true)
     }
 }
 
