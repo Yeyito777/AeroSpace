@@ -6,6 +6,21 @@ import XCTest
 final class CloseCommandTest: XCTestCase {
     override func setUp() async throws { setUpWorkspacesForTests() }
 
+    func testFocusSinkPolicyForClosingAnEmptyWorkspace() {
+        XCTAssertTrue(shouldActivateFocusSinkBeforeClose(
+            isFocusedWindow: true,
+            workspaceWindowCount: 1,
+        ))
+        XCTAssertFalse(shouldActivateFocusSinkBeforeClose(
+            isFocusedWindow: false,
+            workspaceWindowCount: 1,
+        ))
+        XCTAssertFalse(shouldActivateFocusSinkBeforeClose(
+            isFocusedWindow: true,
+            workspaceWindowCount: 2,
+        ))
+    }
+
     func testSimple() async {
         Workspace.get(byName: name).rootTilingContainer.apply {
             _ = TestWindow.new(id: 1, parent: $0).focusWindow()

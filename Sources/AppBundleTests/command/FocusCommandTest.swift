@@ -109,7 +109,7 @@ final class FocusCommandTest: XCTestCase {
         assertEquals(focus.windowOrNil?.windowId, 2)
     }
 
-    func testExplicitWindowIdReassertsNativeFocus() async {
+    func testExplicitWindowIdRequestsPostLayoutNativeFocus() async {
         let window = TestWindow.new(
             id: 1,
             parent: Workspace.get(byName: name).rootTilingContainer,
@@ -117,11 +117,15 @@ final class FocusCommandTest: XCTestCase {
         assertEquals(window.focusWindow(), true)
         TestApp.shared.focusedWindow = nil
 
-        let result = await parseCommand("focus --window-id 1").cmdOrDie.run(.defaultEnv, .emptyStdin)
+        let syncRequest = NativeFocusSyncRequest()
+        let result = await $nativeFocusSyncRequest.withValue(syncRequest) {
+            await parseCommand("focus --window-id 1").cmdOrDie.run(.defaultEnv, .emptyStdin)
+        }
 
         assertEquals(result.exitCode.rawValue, 0)
         assertEquals(focus.windowOrNil?.windowId, 1)
-        assertEquals(TestApp.shared.focusedWindow?.windowId, 1)
+        assertEquals(TestApp.shared.focusedWindow, nil)
+        assertEquals(syncRequest.isRequested, true)
     }
 
     func testFocusOverFloatingWindows() async {

@@ -71,8 +71,9 @@ private func focusExplicitly(_ window: Window) -> BinaryExitCode {
     guard window.focusWindow() else { return .fail }
     // An exact target is explicit user intent. Reassert native focus even when
     // the AeroSpace model already points at this window; model registration can
-    // precede macOS key-window focus for newly created windows.
-    window.nativeFocus()
+    // precede macOS key-window focus for newly created windows. The light
+    // session performs this request after layout is committed.
+    requestNativeFocusSync()
     return .succ
 }
 

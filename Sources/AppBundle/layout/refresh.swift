@@ -5,6 +5,31 @@ import Common
 private var activeRefreshTask: Task<(), any Error>? = nil
 
 @MainActor
+final class NativeFocusSyncRequest: Sendable {
+    var isRequested = false
+}
+
+@TaskLocal
+var nativeFocusSyncRequest: NativeFocusSyncRequest? = nil
+
+@MainActor
+func requestNativeFocusSync() {
+    nativeFocusSyncRequest?.isRequested = true
+}
+
+@MainActor
+private func syncFocusToMacOs(_ target: LiveFocus) {
+    if let window = target.windowOrNil {
+        window.nativeFocus()
+    } else {
+        // AeroSpace workspaces are virtual. Owning native focus while an empty
+        // workspace is active prevents macOS from surfacing an app whose
+        // windows belong to a hidden workspace.
+        NSRunningApplication.current.activate(options: .activateIgnoringOtherApps)
+    }
+}
+
+@MainActor
 func scheduleCancellableCompleteRefreshSession(
     _ event: RefreshSessionEvent,
     optimisticallyPreLayoutWorkspaces: Bool = false,
@@ -65,26 +90,29 @@ func runLightSession<T>(
     defer { signposter.endInterval(#function, state) }
     activeRefreshTask?.cancel() // Give priority to runSession
     activeRefreshTask = nil
-    return try await $refreshSessionEvent.withValue(event) {
-        let nativeFocused = try await getNativeFocusedWindow(.cancellable)
-        if let nativeFocused { try await debugWindowsIfRecording(nativeFocused, .cancellable) }
-        updateFocusCache(nativeFocused)
-        let focusBefore = focus.windowOrNil
+    let syncRequest = NativeFocusSyncRequest()
+    return try await $nativeFocusSyncRequest.withValue(syncRequest) {
+        try await $refreshSessionEvent.withValue(event) {
+            let nativeFocused = try await getNativeFocusedWindow(.cancellable)
+            if let nativeFocused { try await debugWindowsIfRecording(nativeFocused, .cancellable) }
+            updateFocusCache(nativeFocused)
+            let focusBefore = focus
 
-        await refreshModel_nonCancellable()
-        let result = try await body()
-        await refreshModel_nonCancellable()
+            await refreshModel_nonCancellable()
+            let result = try await body()
+            await refreshModel_nonCancellable()
 
-        let focusAfter = focus.windowOrNil
+            let focusAfter = focus
 
-        updateTrayText()
-        SecureInputPanel.shared.refresh()
-        if !event.isFocusFollowsMouse { try await layoutWorkspaces() }
-        if focusBefore != focusAfter {
-            focusAfter?.nativeFocus() // syncFocusToMacOs
+            updateTrayText()
+            SecureInputPanel.shared.refresh()
+            if !event.isFocusFollowsMouse { try await layoutWorkspaces() }
+            if focusBefore != focusAfter || syncRequest.isRequested {
+                syncFocusToMacOs(focusAfter)
+            }
+            if !event.isFocusFollowsMouse { scheduleCancellableCompleteRefreshSession(event) }
+            return result
         }
-        if !event.isFocusFollowsMouse { scheduleCancellableCompleteRefreshSession(event) }
-        return result
     }
 }
 

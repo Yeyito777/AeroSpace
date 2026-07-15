@@ -1,6 +1,13 @@
 import AppKit
 import Common
 
+func shouldActivateFocusSinkBeforeClose(
+    isFocusedWindow: Bool,
+    workspaceWindowCount: Int,
+) -> Bool {
+    isFocusedWindow && workspaceWindowCount == 1
+}
+
 struct CloseCommand: Command {
     let args: CloseCmdArgs
     /*conforms*/ let shouldResetClosedWindowsCache = false
@@ -13,6 +20,16 @@ struct CloseCommand: Command {
         // Access ax directly. Not cool :(
         if await args.quitIfLastWindow.andAsync({ @MainActor @Sendable in (try? await window.macAppUnsafe.getAxWindowsCount(.nonCancellable)) == 1 }) {
             let app = window.macAppUnsafe
+            if shouldActivateFocusSinkBeforeClose(
+                isFocusedWindow: focus.windowOrNil == window,
+                workspaceWindowCount: target.workspace.allLeafWindowsRecursive.count,
+            ) {
+                // If the terminating app owns the only window on the active
+                // virtual workspace, become the native frontmost app first.
+                // Otherwise macOS activates an app from another workspace
+                // while the current workspace is empty.
+                NSRunningApplication.current.activate(options: .activateIgnoringOtherApps)
+            }
             if app.nsApp.terminate() {
                 for workspace in Workspace.all {
                     for window in workspace.allLeafWindowsRecursive where window.app.pid == app.pid {
