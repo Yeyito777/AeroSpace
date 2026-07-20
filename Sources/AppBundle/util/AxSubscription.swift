@@ -14,11 +14,11 @@ final class AxSubscription {
         self.ax = ax
     }
 
-    private func subscribe(_ key: String) throws -> Bool {
+    private func subscribe(_ key: String, phase: AxRequestPhase) throws -> Bool {
         axThreadToken.checkEquals(axTaskLocalAppThreadToken)
         if shouldSkipAxRequests(for: axThreadToken.pid) { return false }
         let error = AXObserverAddNotification(obs, ax, key as CFString, nil)
-        recordAxError(error)
+        recordAxError(error, phase: phase)
         if error == .success {
             notifKeys.insert(key)
             return true
@@ -32,6 +32,7 @@ final class AxSubscription {
         _ ax: AXUIElement,
         _ job: RunLoopJob,
         _ handlerToNotifKeyMapping: HandlerToNotifKeyMapping,
+        phase: AxRequestPhase = .establishedApp,
     ) throws -> [AxSubscription] {
         var result: [AxSubscription] = []
         var visitedNotifKeys: Set<String> = []
@@ -42,7 +43,7 @@ final class AxSubscription {
             for key: String in notifKeys {
                 try job.checkCancellation()
                 assert(visitedNotifKeys.insert(key).inserted)
-                if try !subscription.subscribe(key) { return [] }
+                if try !subscription.subscribe(key, phase: phase) { return [] }
             }
             CFRunLoopAddSource(CFRunLoopGetCurrent(), AXObserverGetRunLoopSource(obs), .defaultMode)
             result.append(subscription)

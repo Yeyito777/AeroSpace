@@ -24,4 +24,22 @@ final class AxAppCircuitBreakerTest: XCTestCase {
         XCTAssertTrue(state.shouldSkipRequests(for: 42, now: now.advanced(by: .seconds(1))))
         XCTAssertFalse(state.shouldSkipRequests(for: 42, now: later.advanced(by: AxAppCircuitBreakerState.cooldownDuration)))
     }
+
+    func testRegistrationTimeoutDoesNotOpenCircuit() {
+        var state = AxAppCircuitBreakerState()
+        let now = ContinuousClock().now
+
+        state.recordTimeout(for: 42, now: now, phase: .appRegistration)
+
+        XCTAssertFalse(state.shouldSkipRequests(for: 42, now: now))
+    }
+
+    func testEstablishedAppTimeoutStillOpensCircuit() {
+        var state = AxAppCircuitBreakerState()
+        let now = ContinuousClock().now
+
+        state.recordTimeout(for: 42, now: now, phase: .establishedApp)
+
+        XCTAssertTrue(state.shouldSkipRequests(for: 42, now: now))
+    }
 }

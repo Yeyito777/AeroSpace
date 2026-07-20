@@ -341,6 +341,13 @@ private func windowOrNil(_ any: Any?) -> WindowIdAndAxUiElementMock? {
     }
 }
 
+enum AxRequestPhase {
+    // A newly launched app can publish its window before its AX endpoint is
+    // ready. That startup race is not evidence that the app is unresponsive.
+    case appRegistration
+    case establishedApp
+}
+
 struct AxAppCircuitBreakerState {
     static let cooldownDuration: Duration = .seconds(1)
 
@@ -349,7 +356,9 @@ struct AxAppCircuitBreakerState {
     mutating func recordTimeout(
         for pid: pid_t,
         now: ContinuousClock.Instant,
+        phase: AxRequestPhase = .establishedApp,
     ) {
+        if phase == .appRegistration { return }
         unresponsiveUntil[pid] = now.advanced(by: Self.cooldownDuration)
     }
 
@@ -369,10 +378,10 @@ private final class AxAppCircuitBreaker: @unchecked Sendable {
     private let lock = NSLock()
     private var state = AxAppCircuitBreakerState()
 
-    func recordTimeout(for pid: pid_t) {
+    func recordTimeout(for pid: pid_t, phase: AxRequestPhase) {
         lock.lock()
         defer { lock.unlock() }
-        state.recordTimeout(for: pid, now: clock.now)
+        state.recordTimeout(for: pid, now: clock.now, phase: phase)
     }
 
     func shouldSkipRequests(for pid: pid_t) -> Bool {
@@ -388,9 +397,9 @@ func shouldSkipAxRequests(for pid: pid_t) -> Bool {
     axAppCircuitBreaker.shouldSkipRequests(for: pid)
 }
 
-func recordAxError(_ error: AXError) {
+func recordAxError(_ error: AXError, phase: AxRequestPhase = .establishedApp) {
     if error == .cannotComplete, let pid = axTaskLocalAppThreadToken?.pid {
-        axAppCircuitBreaker.recordTimeout(for: pid)
+        axAppCircuitBreaker.recordTimeout(for: pid, phase: phase)
     }
 }
 
@@ -399,12 +408,15 @@ extension AXUIElement: AxUiElementMock {
         getWithError(attr).value
     }
 
-    func getWithError<Attr: ReadableAttr>(_ attr: Attr) -> (value: Attr.T?, error: AXError) {
+    func getWithError<Attr: ReadableAttr>(
+        _ attr: Attr,
+        phase: AxRequestPhase = .establishedApp,
+    ) -> (value: Attr.T?, error: AXError) {
         let state = signposter.beginInterval(#function, "attr: \(attr.key) axTaskLocalAppThreadToken: \(axTaskLocalAppThreadToken?.idForDebug)")
         defer { signposter.endInterval(#function, state) }
         var raw: AnyObject?
         let error = unsafe AXUIElementCopyAttributeValue(self, attr.key as CFString, &raw)
-        recordAxError(error)
+        recordAxError(error, phase: phase)
         return (error == .success ? raw.flatMap(attr.getter) : nil, error)
     }
 

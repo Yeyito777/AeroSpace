@@ -22,6 +22,7 @@ final class MacApp: AbstractApp {
     var lastNativeFocusedWindowId: UInt32? = nil
     private var thread: Thread?
     private var setFrameJobs: [UInt32: RunLoopJob] = [:]
+    @MainActor private var didCompleteInitialWindowRefresh = false
     @MainActor private static var focusJob: RunLoopJob? = nil
 
     /*conforms*/ var name: String? { nsApp.localizedName }
@@ -75,7 +76,13 @@ final class MacApp: AbstractApp {
                     (refreshObs, [kAXWindowCreatedNotification, kAXFocusedWindowChangedNotification]),
                 ]
                 let job = RunLoopJob(.cancellable)
-                let subscriptions = (try? unsafe AxSubscription.bulkSubscribe(nsApp, axApp, job, handlers)) ?? []
+                let subscriptions = (try? unsafe AxSubscription.bulkSubscribe(
+                    nsApp,
+                    axApp,
+                    job,
+                    handlers,
+                    phase: .appRegistration,
+                )) ?? []
                 let isGood = !subscriptions.isEmpty
                 let app = isGood ? MacApp(nsApp, axApp, subscriptions, Thread.current) : nil
 
@@ -326,9 +333,10 @@ final class MacApp: AbstractApp {
             return MacWindow.allWindows.filter { $0.app.pid == pid }.map(\.windowId)
         }
         guard let thread else { return [] }
-        let (alive, dead) = try await thread.runInLoop(.cancellable) { [pid, nsApp, windows, axApp] (job) -> ([UInt32], [UInt32]) in
+        let phase: AxRequestPhase = didCompleteInitialWindowRefresh ? .establishedApp : .appRegistration
+        let (alive, dead, completedWindowRefresh) = try await thread.runInLoop(.cancellable) { [pid, nsApp, windows, axApp] (job) -> ([UInt32], [UInt32], Bool) in
             let cached: [UInt32: AxWindow] = windows.threadGuarded
-            if shouldSkipAxRequests(for: pid) { return (Array(cached.keys), []) }
+            if shouldSkipAxRequests(for: pid) { return (Array(cached.keys), [], false) }
             var alive = cached
             var dead = [UInt32: AxWindow]()
             // Second line of defence against lock screen. See the first line of defence: closedWindowsCache
@@ -338,7 +346,7 @@ final class MacApp: AbstractApp {
                     try job.checkCancellation()
                     let result = window.ax.containingWindowIdWithError()
                     if result.error == .cannotComplete {
-                        return (Array(cached.keys), [])
+                        return (Array(cached.keys), [], false)
                     }
                     if result.windowId == nil {
                         alive[windowId] = nil
@@ -347,9 +355,9 @@ final class MacApp: AbstractApp {
                 }
             }
 
-            let reportedWindows = axApp.threadGuarded.getWithError(Ax.windowsAttr)
+            let reportedWindows = axApp.threadGuarded.getWithError(Ax.windowsAttr, phase: phase)
             if reportedWindows.error == .cannotComplete {
-                return (Array(cached.keys), [])
+                return (Array(cached.keys), [], false)
             }
             for (id, window) in reportedWindows.value ?? [] {
                 try job.checkCancellation()
@@ -357,8 +365,9 @@ final class MacApp: AbstractApp {
             }
 
             windows.threadGuarded = alive
-            return (Array(alive.keys), Array(dead.keys))
+            return (Array(alive.keys), Array(dead.keys), true)
         }
+        if completedWindowRefresh { didCompleteInitialWindowRefresh = true }
         for windowId in dead {
             setFrameJobs.removeValue(forKey: windowId)?.cancel()
         }
