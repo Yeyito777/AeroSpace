@@ -1,0 +1,108 @@
+#!/bin/sh
+
+set -u
+
+aerospace="${AEROSPACE_BIN:-/opt/homebrew/bin/aerospace}"
+st_binary="${ST_BINARY:-$HOME/Applications/st.app/Contents/MacOS/st}"
+poll_interval="${ST_AEROSPACE_POLL_INTERVAL:-0.05}"
+max_attempts="${ST_AEROSPACE_MAX_ATTEMPTS:-80}"
+
+start_directory=$HOME
+inherit_virtualenv=
+case "${1:-}" in
+	--inherit-cwd)
+		# Each native st window owns one process and one direct PTY child.
+		# Inspect that child, not st's launch-time cwd or unrelated jobs.
+		focused=$("$aerospace" list-windows --focused \
+			--format '%{app-bundle-id} %{app-pid}' 2>/dev/null)
+		case "$focused" in
+			"io.yeyito.st "*)
+				terminal_pid=${focused#* }
+				case "$terminal_pid" in
+					''|*[!0-9]*) ;;
+					*)
+						child_pid=$(/usr/bin/pgrep -P "$terminal_pid" | sed -n '1p')
+						if [ -n "$child_pid" ]; then
+							directory=$(/usr/sbin/lsof -a -p "$child_pid" -d cwd -Fn 2>/dev/null |
+								sed -n 's/^n//p')
+							if [ -n "$directory" ] && [ -d "$directory" ]; then
+								start_directory=$directory
+							fi
+							context="$HOME/.cache/st-shell-context/$terminal_pid-$child_pid.venv"
+							if [ -f "$context" ] && [ ! -L "$context" ]; then
+								IFS= read -r environment < "$context" || environment=
+								if [ -n "$environment" ] && [ -f "$environment/bin/activate" ]; then
+									inherit_virtualenv=$environment
+								fi
+							fi
+						fi
+						;;
+				esac
+				;;
+		esac
+		;;
+	'') ;;
+	*)
+		printf 'Usage: %s [--inherit-cwd]\n' "$0" >&2
+		exit 64
+		;;
+esac
+
+if [ ! -x "$aerospace" ]; then
+	printf 'AeroSpace is not installed at %s\n' "$aerospace" >&2
+	exit 1
+fi
+if [ ! -x "$st_binary" ]; then
+	printf 'st is not installed at %s\n' "$st_binary" >&2
+	exit 1
+fi
+
+target_workspace=$("$aerospace" list-workspaces --focused | sed -n '1p')
+if [ -z "$target_workspace" ]; then
+	printf 'Could not determine the focused AeroSpace workspace\n' >&2
+	exit 1
+fi
+
+cd "$start_directory" 2>/dev/null || cd "$HOME" || exit 1
+ST_INHERIT_VIRTUAL_ENV="$inherit_virtualenv" \
+	ST_AEROSPACE_MANAGED=1 nohup "$st_binary" </dev/null >/dev/null 2>&1 &
+st_pid=$!
+
+window_id=
+attempt=0
+while [ "$attempt" -lt "$max_attempts" ]; do
+	window_id=$("$aerospace" list-windows --monitor all --pid "$st_pid" \
+		--format '%{window-id}' 2>/dev/null | sed -n '1p')
+	if [ -n "$window_id" ]; then
+		break
+	fi
+	attempt=$((attempt + 1))
+	sleep "$poll_interval"
+done
+
+if [ -z "$window_id" ]; then
+	kill "$st_pid" 2>/dev/null || true
+	printf 'AeroSpace did not register the st window for PID %s\n' "$st_pid" >&2
+	exit 1
+fi
+
+if ! "$aerospace" move-node-to-workspace --window-id "$window_id" \
+	"$target_workspace" >/dev/null 2>&1; then
+	kill "$st_pid" 2>/dev/null || true
+	printf 'AeroSpace could not move st window %s to workspace %s\n' \
+		"$window_id" "$target_workspace" >&2
+	exit 1
+fi
+
+if ! "$aerospace" focus --window-id "$window_id" >/dev/null 2>&1; then
+	kill "$st_pid" 2>/dev/null || true
+	printf 'AeroSpace could not focus st window %s\n' "$window_id" >&2
+	exit 1
+fi
+
+# Managed st windows stay transparent until AeroSpace has finished both layout
+# and native focus. SIGUSR1 completes that handshake without a timing guess.
+if ! kill -USR1 "$st_pid" 2>/dev/null; then
+	printf 'st process %s exited before its window could be revealed\n' "$st_pid" >&2
+	exit 1
+fi

@@ -1,0 +1,70 @@
+{
+  "aerospace.toml": {
+    "sha256": "6eb15e6c1cb059c6539545cc3dda7073c0920be0c036ec6c4d35c42c172df86f",
+    "source": "~/.aerospace.toml"
+  },
+  "aerospace/close-window-stay-workspace.sh": {
+    "sha256": "53d4262fd8bd44e62f9088321c3d0b9a2d19b06049812e965abd33f160f5c160",
+    "source": "~/.config/aerospace/close-window-stay-workspace.sh"
+  },
+  "aerospace/create-numeric-workspace.sh": {
+    "sha256": "2222d7bfbe3ffee229e52d5b37264a829433c1538211f8fd81522d663b2e2b53",
+    "source": "~/.config/aerospace/create-numeric-workspace.sh"
+  },
+  "aerospace/delete-numeric-workspace.sh": {
+    "sha256": "096d462318f329116a00c145e5381f433d8b47a85382652eaf8f9259da3be913",
+    "source": "~/.config/aerospace/delete-numeric-workspace.sh"
+  },
+  "aerospace/launch-exocortex.sh": {
+    "sha256": "fe33da0671b8a07b40b351054910ee89ab45aab56a4d81be2903ba91b5088a2d",
+    "source": "~/.config/aerospace/launch-exocortex.sh"
+  },
+  "aerospace/move-window-fully-left.sh": {
+    "sha256": "da65f139163046342f17c8d37b44c411df415764bd728c60f09c5375705696bd",
+    "source": "~/.config/aerospace/move-window-fully-left.sh"
+  },
+  "aerospace/numeric-workspace-step.sh": {
+    "sha256": "4c87bc8fece75240738c2e5bca8ab5646224b2873fe3a154730b1a0fdba1fa36",
+    "source": "~/.config/aerospace/numeric-workspace-step.sh"
+  },
+  "aerospace/open-spotlight.jxa": {
+    "sha256": "5828495a30898188fe27514d7f83510cff75dd1b98986f40d2d4975973e7c6fd",
+    "source": "~/.config/aerospace/open-spotlight.jxa"
+  },
+  "aerospace/open-terminal-current-workspace.sh": {
+    "sha256": "aacf503f706a38052314ffa4d352dd8271f614a436904d379e10284d758f963e",
+    "source": "~/.config/aerospace/open-terminal-current-workspace.sh"
+  },
+  "aerospace/raycast-current-workspace.swift": {
+    "sha256": "6de3daff5f16e206f9257d79f93531faec8e4404a1ce1f3adc6115d9febc4a2d",
+    "source": "~/.config/aerospace/raycast-current-workspace.swift"
+  },
+  "aerospace/type-em-dash.sh": {
+    "sha256": "1ef46c4dc0c5e111cfc44f60481411dd471c853e384c592b74940f570ae343dd",
+    "source": "~/.config/aerospace/type-em-dash.sh"
+  },
+  "launchagents/com.yeyito.aerospace.raycast-workspace.plist": {
+    "sha256": "5d82169e75f728ed51fa68a4b2841dc9248e0dec1d3ab48f055e91dda126d9db",
+    "source": "~/Library/LaunchAgents/com.yeyito.aerospace.raycast-workspace.plist"
+  },
+  "launchagents/com.yeyito.swap-command-option.plist": {
+    "sha256": "2eaa88ffc93750f409081cdf1f14a84fe0a3bc1027681a175c745a7a3ef17c61",
+    "source": "~/Library/LaunchAgents/com.yeyito.swap-command-option.plist"
+  },
+  "scripts/st-aerospace-launch": {
+    "sha256": "b4c77c4414a7317089a39745a5d3c614d646c8254ab69fd13f758a876e39cafd",
+    "source": "~/Applications/st.app/Contents/Resources/bin/st-aerospace-launch"
+  },
+  "scripts/st-shell-context.zsh": {
+    "sha256": "3dd09aacef9f0dc88f027e875db7cc36b123c872170837c41be62224d6517847",
+    "source": "~/Applications/st.app/Contents/Resources/bin/st-shell-context.zsh"
+  },
+  "tests/test_aerospace_launcher.sh": {
+    "sha256": "4463b15b952b7fdf5a5145208693912f6f3b9a72e5127620bfd52e231458e9fb",
+    "source": "~/Desktop/st/tests/test_aerospace_launcher.sh"
+  },
+  "tests/test_shell_context.zsh": {
+    "sha256": "bf18e9b19233d8a959417d18c0fa8fcbd649e8595d2264a4a550561db3543fd4",
+    "source": "~/Desktop/st/tests/test_shell_context.zsh"
+  }
+}

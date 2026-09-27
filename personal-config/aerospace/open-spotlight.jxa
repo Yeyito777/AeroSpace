@@ -1,0 +1,12 @@
+ObjC.import("CoreGraphics");
+
+const source = $.CGEventSourceCreate($.kCGEventSourceStateCombinedSessionState);
+
+function postSpace(isDown) {
+  const event = $.CGEventCreateKeyboardEvent(source, 49, isDown);
+  $.CGEventSetFlags(event, $.kCGEventFlagMaskCommand);
+  $.CGEventPost($.kCGHIDEventTap, event);
+}
+
+postSpace(true);
+postSpace(false);
