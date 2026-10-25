@@ -24,6 +24,7 @@ final class MacWindow: Window {
     static func getOrRegister(windowId: UInt32, macApp: MacApp) async throws -> MacWindow {
         if let existing = allWindowsMap[windowId] { return existing }
         let rect = try await macApp.getAxRect(windowId, .cancellable)
+        markWindowDetection("\(windowId) rect")
         // The window was managed by the previous AeroSpace instance. See persistentWorld.swift
         let placement = pendingWindowPlacement(windowId: windowId, app: macApp)
         let data = try await unbindAndGetBindingDataForNewWindow(
@@ -41,6 +42,7 @@ final class MacWindow: Window {
         if let existing = allWindowsMap[windowId] { return existing }
         let window = MacWindow(windowId, macApp, lastFloatingSize: rect?.size, parent: data.parent, adaptiveWeight: data.adaptiveWeight, index: data.index)
         allWindowsMap[windowId] = window
+        markWindowDetection("classified")
 
         try await debugWindowsIfRecording(window, .cancellable)
         if let placement {
@@ -49,6 +51,7 @@ final class MacWindow: Window {
         } else if try await !restoreClosedWindowsCacheIfNeeded(newlyDetectedWindow: window) {
             await tryOnWindowDetected(window)
         }
+        markWindowDetection("detected")
         return window
     }
 
@@ -248,6 +251,7 @@ extension Window {
 @MainActor
 private func unbindAndGetBindingDataForNewWindow(_ windowId: UInt32, _ macApp: MacApp, _ workspace: Workspace, window: Window?, _ cm: CancellationMode) async throws -> BindingData {
     let windowLevel = getWindowLevel(for: windowId)
+    markWindowDetection("level")
     return switch try await macApp.getAxUiElementWindowType(windowId, windowLevel, cm) {
         case .popup: BindingData(parent: macosPopupWindowsContainer, adaptiveWeight: WEIGHT_AUTO, index: INDEX_BIND_LAST)
         case .dialog: BindingData(parent: workspace.floatingWindowsContainer, adaptiveWeight: WEIGHT_AUTO, index: INDEX_BIND_LAST)
@@ -294,6 +298,7 @@ func onWindowDetected(_ env: CmdEnv, _ io: CmdIo, _ window: Window) async -> Int
         appBundleId: window.app.rawAppBundleId,
         appName: window.app.name,
     ))
+    markWindowDetection("broadcast")
     var lastExitCode = Int32ExitCode.succ
     for callback in config.onWindowDetected where await callback.matches(window) {
         lastExitCode = await callback.run.run(env.withWindowId(window.windowId), io)
