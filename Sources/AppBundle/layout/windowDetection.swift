@@ -142,7 +142,8 @@ private func windowDetectionPass(pid: pid_t, _ timing: WindowDetectionTiming?) a
     // Including the window that getNativeFocusedWindow might have registered
     let newWindows = MacWindow.allWindows.filter { $0.registrationIndex >= registrationsBefore }
     timing?.mark("registered \(app.rawAppBundleId ?? "nil-bundle-id") \(newWindows.map(\.windowId))")
-    if newWindows.isEmpty { return }
+    // Popups (e.g. tooltips) aren't laid out. Don't double the layout work of the complete refresh for them
+    if newWindows.allSatisfy({ $0.parent is MacosPopupWindowsContainer }) { return }
 
     updateTrayText()
     try await normalizeLayoutReason(newlyDetectedWindows: newWindows)
