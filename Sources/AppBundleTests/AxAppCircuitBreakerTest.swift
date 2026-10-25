@@ -10,19 +10,30 @@ final class AxAppCircuitBreakerTest: XCTestCase {
 
         XCTAssertTrue(state.shouldSkipRequests(for: 42, now: now))
         XCTAssertFalse(state.shouldSkipRequests(for: 24, now: now))
-        XCTAssertFalse(state.shouldSkipRequests(for: 42, now: now.advanced(by: AxAppCircuitBreakerState.cooldownDuration)))
+        XCTAssertFalse(state.shouldSkipRequests(for: 42, now: now.advanced(by: AxAppCircuitBreakerState.cooldowns[0])))
     }
 
-    func testRepeatedTimeoutExtendsCooldown() {
+    func testRepeatedTimeoutsExtendCooldown() {
+        var state = AxAppCircuitBreakerState()
+        var now = ContinuousClock().now
+        for cooldown in AxAppCircuitBreakerState.cooldowns + [.seconds(1)] {
+            state.recordTimeout(for: 42, now: now)
+            XCTAssertTrue(state.shouldSkipRequests(for: 42, now: now.advanced(by: cooldown - .milliseconds(1))))
+            now = now.advanced(by: cooldown)
+            XCTAssertFalse(state.shouldSkipRequests(for: 42, now: now))
+        }
+    }
+
+    func testTimeoutStreakResets() {
         var state = AxAppCircuitBreakerState()
         let now = ContinuousClock().now
-        let later = now.advanced(by: .milliseconds(500))
-
         state.recordTimeout(for: 42, now: now)
+        state.recordTimeout(for: 42, now: now.advanced(by: .milliseconds(100)))
+        let later = now.advanced(by: .milliseconds(100) + AxAppCircuitBreakerState.streakWindow)
+
         state.recordTimeout(for: 42, now: later)
 
-        XCTAssertTrue(state.shouldSkipRequests(for: 42, now: now.advanced(by: .seconds(1))))
-        XCTAssertFalse(state.shouldSkipRequests(for: 42, now: later.advanced(by: AxAppCircuitBreakerState.cooldownDuration)))
+        XCTAssertFalse(state.shouldSkipRequests(for: 42, now: later.advanced(by: AxAppCircuitBreakerState.cooldowns[0])))
     }
 
     func testRegistrationTimeoutDoesNotOpenCircuit() {

@@ -172,7 +172,7 @@ private func windowDetectionPass(pid: pid_t, createdWindow: AxElementBox?, _ tim
     if newWindows.allSatisfy({ $0.parent is MacosPopupWindowsContainer }) { return false }
 
     updateTrayText()
-    try await normalizeLayoutReason(newlyDetectedWindows: newWindows)
+    try await normalizeLayoutReason(newlyDetectedWindows: newWindows, prefetched: report.newWindows)
     timing?.mark("layout reason")
     try await layoutWorkspaces()
     timing?.mark("laid out")

@@ -330,10 +330,14 @@ final class MacApp: AbstractApp {
     /// it in kAXWindowsAttribute (yet)
     @MainActor func registerNewWindows(createdWindow: AxElementBox?) async throws -> AxWindowsRefreshReport {
         let frontmostAppBundleId = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-        let (alive, report) = try await refreshAndGetAliveWindowIds(frontmostAppBundleId: frontmostAppBundleId, createdWindow: createdWindow)
+        let (alive, report) = try await refreshAndGetAliveWindowIds(
+            frontmostAppBundleId: frontmostAppBundleId,
+            createdWindow: createdWindow,
+            describeNewWindows: true,
+        )
         markWindowDetection("ax windows \(report)")
         for windowId in alive {
-            try await MacWindow.getOrRegister(windowId: windowId, macApp: self)
+            try await MacWindow.getOrRegister(windowId: windowId, macApp: self, prefetched: report.newWindows[windowId])
         }
         return report
     }
@@ -341,6 +345,7 @@ final class MacApp: AbstractApp {
     @MainActor private func refreshAndGetAliveWindowIds(
         frontmostAppBundleId: String?,
         createdWindow: AxElementBox? = nil,
+        describeNewWindows: Bool = false,
     ) async throws -> (alive: [UInt32], report: AxWindowsRefreshReport) {
         if nsApp.isTerminated {
             await destroy()
@@ -352,7 +357,7 @@ final class MacApp: AbstractApp {
         guard let thread else { return ([], AxWindowsRefreshReport(skipped: "no app thread")) }
         let phase: AxRequestPhase = didCompleteInitialWindowRefresh ? .establishedApp : .appRegistration
         let (alive, dead, completedWindowRefresh, report) = try await thread.runInLoop(.cancellable) {
-            [pid, nsApp, windows, axApp] (job) -> ([UInt32], [UInt32], Bool, AxWindowsRefreshReport) in
+            [pid, nsApp, windows, axApp, appId] (job) -> ([UInt32], [UInt32], Bool, AxWindowsRefreshReport) in
             let cached: [UInt32: AxWindow] = windows.threadGuarded
             var report = AxWindowsRefreshReport()
             if shouldSkipAxRequests(for: pid) {
@@ -412,6 +417,21 @@ final class MacApp: AbstractApp {
                 }
             }
 
+            if describeNewWindows {
+                // Everything that registering and laying out the new windows needs, while the app is answering.
+                // Saves round trips through the main thread, each of which can find the app busy again
+                let start = clock.now
+                for (id, window) in alive where cached[id] == nil {
+                    try job.checkCancellation()
+                    let type = window.ax.getWindowType(axApp: axApp.threadGuarded, appId, nsApp.activationPolicy, getWindowLevelOffMainThread(for: id))
+                    let rect = try AppBundle.getAxRect(window: window.ax, job: job)
+                    let isFullscreen = window.ax.get(Ax.isFullscreenAttr) == true
+                    let isMinimized = !isFullscreen && window.ax.get(Ax.minimizedAttr) == true
+                    report.newWindows[id] = NewWindowDescription(type: type, rect: rect, isMacosFullscreen: isFullscreen, isMacosMinimized: isMinimized)
+                }
+                report.describe = clock.now - start
+            }
+
             windows.threadGuarded = alive
             return (Array(alive.keys), Array(dead.keys), true, report)
         }
@@ -461,6 +481,14 @@ final class AxElementBox: @unchecked Sendable {
     init(_ ax: AXUIElement) { self.ax = ax }
 }
 
+/// AX state of a new window, fetched together with the window list. See MacWindow.getOrRegister
+struct NewWindowDescription: Sendable {
+    let type: AxUiElementWindowType
+    let rect: Rect?
+    let isMacosFullscreen: Bool
+    let isMacosMinimized: Bool
+}
+
 /// What the AX side of a window refresh saw. For the window detection timing log
 struct AxWindowsRefreshReport: Sendable, CustomStringConvertible {
     var skipped: String? = nil
@@ -472,12 +500,14 @@ struct AxWindowsRefreshReport: Sendable, CustomStringConvertible {
     var registeredFromNotification = false
     var windowsQuery: Duration = .zero
     var subscriptions: Duration = .zero
+    var describe: Duration = .zero
+    var newWindows: [UInt32: NewWindowDescription] = [:]
 
     /// The window of the notification is gone, there is nothing to wait for
     var isCreatedWindowGone: Bool { createdWindowError == AXError.invalidUIElement.rawValue }
 
     var description: String {
-        var parts = ["query \(windowsQuery.ms)ms", "subscribe \(subscriptions.ms)ms", "reported \(reported)"]
+        var parts = ["query \(windowsQuery.ms)ms", "subscribe \(subscriptions.ms)ms", "describe \(describe.ms)ms", "reported \(reported)"]
         if let skipped { parts.append("skipped: \(skipped)") }
         if let windowsError { parts.append("AXWindows error \(windowsError)") }
         if !rejected.isEmpty { parts.append("rejected \(rejected)") }

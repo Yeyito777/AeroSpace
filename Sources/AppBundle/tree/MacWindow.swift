@@ -21,9 +21,9 @@ final class MacWindow: Window {
 
     @MainActor
     @discardableResult
-    static func getOrRegister(windowId: UInt32, macApp: MacApp) async throws -> MacWindow {
+    static func getOrRegister(windowId: UInt32, macApp: MacApp, prefetched: NewWindowDescription? = nil) async throws -> MacWindow {
         if let existing = allWindowsMap[windowId] { return existing }
-        let rect = try await macApp.getAxRect(windowId, .cancellable)
+        let rect = if let prefetched { prefetched.rect } else { try await macApp.getAxRect(windowId, .cancellable) }
         markWindowDetection("\(windowId) rect")
         // The window was managed by the previous AeroSpace instance. See persistentWorld.swift
         let placement = pendingWindowPlacement(windowId: windowId, app: macApp)
@@ -36,6 +36,7 @@ final class MacWindow: Window {
                     : focus.workspace),
             window: nil,
             .cancellable,
+            prefetchedType: prefetched?.type,
         )
 
         // atomic synchronous section
@@ -249,10 +250,23 @@ extension Window {
 
 // The function is private because it's unsafe. It leaves the window in unbound state
 @MainActor
-private func unbindAndGetBindingDataForNewWindow(_ windowId: UInt32, _ macApp: MacApp, _ workspace: Workspace, window: Window?, _ cm: CancellationMode) async throws -> BindingData {
-    let windowLevel = getWindowLevel(for: windowId)
-    markWindowDetection("level")
-    return switch try await macApp.getAxUiElementWindowType(windowId, windowLevel, cm) {
+private func unbindAndGetBindingDataForNewWindow(
+    _ windowId: UInt32,
+    _ macApp: MacApp,
+    _ workspace: Workspace,
+    window: Window?,
+    _ cm: CancellationMode,
+    prefetchedType: AxUiElementWindowType? = nil,
+) async throws -> BindingData {
+    let type: AxUiElementWindowType
+    if let prefetchedType {
+        type = prefetchedType
+    } else {
+        let windowLevel = getWindowLevel(for: windowId)
+        markWindowDetection("level")
+        type = try await macApp.getAxUiElementWindowType(windowId, windowLevel, cm)
+    }
+    return switch type {
         case .popup: BindingData(parent: macosPopupWindowsContainer, adaptiveWeight: WEIGHT_AUTO, index: INDEX_BIND_LAST)
         case .dialog: BindingData(parent: workspace.floatingWindowsContainer, adaptiveWeight: WEIGHT_AUTO, index: INDEX_BIND_LAST)
         case .window: unbindAndGetBindingDataForNewTilingWindow(workspace, window: window)

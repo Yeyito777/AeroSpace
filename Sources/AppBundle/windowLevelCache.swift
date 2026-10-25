@@ -26,6 +26,15 @@ func getWindowLevel(for windowId: UInt32) -> MacOsWindowLevel? {
     return result[windowId]
 }
 
+/// Same as getWindowLevel, for one window, from any thread
+func getWindowLevelOffMainThread(for windowId: UInt32) -> MacOsWindowLevel? {
+    guard let info = (CGWindowListCreateDescriptionFromArray([NSNumber(value: windowId)] as CFArray) as? [NSDictionary])?.first,
+          (info[kCGWindowIsOnscreen] as? Bool) == true, // getWindowLevel only knows on-screen windows
+          let layer = info[kCGWindowLayer] as? NSNumber
+    else { return nil }
+    return .new(windowLevel: layer.intValue)
+}
+
 enum MacOsWindowLevel: Sendable, Equatable {
     case normalWindow
     case alwaysOnTopWindow
