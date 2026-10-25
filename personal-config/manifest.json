@@ -51,17 +51,9 @@
     "sha256": "2eaa88ffc93750f409081cdf1f14a84fe0a3bc1027681a175c745a7a3ef17c61",
     "source": "~/Library/LaunchAgents/com.yeyito.swap-command-option.plist"
   },
-  "scripts/st-aerospace-launch": {
-    "sha256": "046d7ad5851ee4e57d8f0c43984a22964ba0d8b7362504f9283323014ddc4079",
-    "source": "~/Applications/st.app/Contents/Resources/bin/st-aerospace-launch"
-  },
   "scripts/st-shell-context.zsh": {
     "sha256": "3dd09aacef9f0dc88f027e875db7cc36b123c872170837c41be62224d6517847",
     "source": "~/Applications/st.app/Contents/Resources/bin/st-shell-context.zsh"
-  },
-  "tests/test_aerospace_launcher.sh": {
-    "sha256": "dcd75cc010c2ecd8f5512a63bb7fe3a6910bb225d8e890511eefaf3e837b4b4a",
-    "source": "~/Desktop/st/tests/test_aerospace_launcher.sh"
   },
   "tests/test_shell_context.zsh": {
     "sha256": "bf18e9b19233d8a959417d18c0fa8fcbd649e8595d2264a4a550561db3543fd4",

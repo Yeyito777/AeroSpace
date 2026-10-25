@@ -28,10 +28,10 @@ def main():
         "type-em-dash.sh",
     ):
         files[f".config/aerospace/{name}"] = f"aerospace/{name}"
-    for name in ("st-aerospace-launch", "st-shell-context.zsh"):
-        files[f"Applications/st.app/Contents/Resources/bin/{name}"] = f"scripts/{name}"
-    for name in ("test_aerospace_launcher.sh", "test_shell_context.zsh"):
-        files[f"Desktop/st/tests/{name}"] = f"tests/{name}"
+    # st-aerospace-launch is a compiled program built and tested in the st fork
+    # (macos/aerospace_launch.c); only its zsh hook is snapshotted here
+    files["Applications/st.app/Contents/Resources/bin/st-shell-context.zsh"] = "scripts/st-shell-context.zsh"
+    files["Desktop/st/tests/test_shell_context.zsh"] = "tests/test_shell_context.zsh"
     for name in (
         "com.yeyito.swap-command-option.plist",
         "com.yeyito.aerospace.raycast-workspace.plist",

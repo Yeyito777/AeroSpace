@@ -10,9 +10,11 @@ settings and companion helpers, not a replacement for the upstream defaults.
 - `aerospace.toml`: exact current `~/.aerospace.toml`.
 - `aerospace/`: source files from `~/.config/aerospace`, including older
   helpers retained locally. The current TOML determines which shortcuts run.
-- `scripts/`: the installed st launcher and zsh venv-context hook, also
-  maintained in the separate [st fork](https://github.com/Yeyito777/yeyito-term).
-- `tests/`: launcher and shell-context regression tests from that st checkout.
+- `scripts/`: the zsh venv-context hook from the separate
+  [st fork](https://github.com/Yeyito777/yeyito-term). The terminal launcher
+  itself (`st-aerospace-launch`) is a compiled program built, tested and
+  installed with st (`macos/aerospace_launch.c`, `make install-app`).
+- `tests/`: the shell-context regression test from that st checkout.
 - `launchagents/`: Command/Option swap and Raycast workspace-helper setup.
 - `manifest.json`: original source paths and SHA-256 hashes of snapshot files.
 
@@ -41,14 +43,17 @@ configuration. Replace `/Users/yeyito` in the TOML, scripts and launch agents
 if your home directory differs. AeroSpace executable paths in bindings must
 be absolute; `~` is not expanded there.
 
-1. Install this AeroSpace fork and the native macOS st fork. The st launcher
-   claims a warm `st --spare` and uses the managed-window reveal handshake
-   (`SIGUSR1`), so it is not compatible with an arbitrary stock st build.
-   `launch-exocortex.sh` delegates to the same launcher.
+1. Install this AeroSpace fork and the native macOS st fork (`make
+   install-app` installs st.app with its `st-aerospace-launch`). The launcher
+   claims a warm `st --spare`, talks to AeroSpace's socket directly and uses
+   the managed-window reveal handshake (`SIGUSR1`), so it is not compatible
+   with an arbitrary stock st build. `launch-exocortex.sh` delegates to it.
+   Later AeroSpace upgrades: `aerospace restart --install <new AeroSpace.app>`
+   keeps every window where it is.
 2. Copy `aerospace.toml` to `~/.aerospace.toml` and the contents of
    `aerospace/` to `~/.config/aerospace/`. Preserve executable permissions.
-3. Copy `scripts/st-aerospace-launch` and `scripts/st-shell-context.zsh` to
-   `~/Applications/st.app/Contents/Resources/bin/`.
+3. `scripts/st-shell-context.zsh` is installed with st.app; the copy here is
+   for reference.
 4. Add the following at the **end** of `~/.zshrc`:
 
    ```zsh
@@ -85,7 +90,6 @@ From this repository root:
 ```sh
 python3 personal-config/sync-from-home.py         # list the explicit allowlist
 python3 personal-config/sync-from-home.py --write # refresh snapshots and hashes
-sh personal-config/tests/test_aerospace_launcher.sh
 zsh -f personal-config/tests/test_shell_context.zsh
 ```
 
