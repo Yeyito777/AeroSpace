@@ -37,6 +37,13 @@ final class ServerConnection {
         return .success(connection)
     }
 
+    /// The pid of the server process
+    var peerPid: pid_t? {
+        var pid: pid_t = 0
+        var size = socklen_t(MemoryLayout<pid_t>.size)
+        return unsafe getsockopt(fd, SOL_LOCAL, LOCAL_PEERPID, &pid, &size) == 0 ? pid : nil
+    }
+
     /// Same handshake as NWConnection.initConnection
     func initConnection() -> ConnectionError? {
         if let error = writeUInt32(SOCKET_PROTOCOL_VERSION) { return error }

@@ -127,8 +127,24 @@ struct Main {
                 """,
             )
         }
+        if parsedArgs is RestartCmdArgs && ans.exitCode == EXIT_CODE_ZERO {
+            waitForRestartedServer(oldServerPid: connection.peerPid, failExitCode: failExitCode)
+        }
         exit(ans.exitCode)
     }
+}
+
+/// `aerospace restart` returns once the new server accepts commands
+func waitForRestartedServer(oldServerPid: pid_t?, failExitCode: Int32) {
+    let clock = ContinuousClock()
+    let deadline = clock.now + .seconds(30)
+    while clock.now < deadline {
+        if case .success(let connection) = connectToServer(), let pid = connection.peerPid, pid != oldServerPid {
+            return
+        }
+        Thread.sleep(forTimeInterval: 0.02)
+    }
+    exit(failExitCode, err: "The new AeroSpace.app instance doesn't accept commands after 30 seconds")
 }
 
 func connectToServer() -> Result<ServerConnection, ServerConnection.ConnectionError> {

@@ -103,6 +103,7 @@ func runWindowDetectionSession(_ event: RefreshSessionEvent, pid: pid_t, notifie
         }
     } while windowDetectionScheduler.finishPass(pid: pid)
     timing?.flush()
+    schedulePersistentWorldSave()
 
     // Reconcile the rest of the world like any other ax notification would
     if !windowDetectionScheduler.isDetecting {

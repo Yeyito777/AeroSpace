@@ -39,6 +39,8 @@ private struct AppServerTerminationHandler: TerminationHandler {
             )
             window.macApp.setAxFrameForTermination(window.windowId, point, windowSize)
         }
+        // The next start puts windows back into their workspaces. Showing windows above doesn't change the tree
+        savePersistentWorldNow()
         if isDebug {
             let semaphore = DispatchSemaphore(value: 0)
             // Use Task.detached to avoid inheriting @MainActor.

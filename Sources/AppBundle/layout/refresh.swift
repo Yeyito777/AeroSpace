@@ -76,6 +76,7 @@ func runHeavyCompleteRefreshSession(
 
             await refreshModel_nonCancellable()
             try await refresh()
+            if event.isStartup { try await restoreStartupWorld() }
             gcMonitors()
 
             updateTrayText()
@@ -85,7 +86,7 @@ func runHeavyCompleteRefreshSession(
         }
     }
     switch res {
-        case .success(()): break
+        case .success(()): schedulePersistentWorldSave()
         case .failure(let err as CancellationError): check(assumeCancellable, "Non cancellable refresh session was canceled: \(err) (\(type(of: err)))")
         case .failure(let err): die("Illegal error: \(err)")
     }
@@ -122,6 +123,7 @@ func runLightSession<T>(
                 syncFocusToMacOs(focusAfter)
             }
             if !event.isFocusFollowsMouse { scheduleCancellableCompleteRefreshSession(event) }
+            schedulePersistentWorldSave()
             return result
         }
     }

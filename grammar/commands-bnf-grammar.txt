@@ -73,6 +73,8 @@ aerospace -h;
 
     | reload-config [--no-gui | --dry-run]...
 
+    | restart [--install <app_bundle>]
+
     | resize [--window-id <window_id>] (smart|smart-opposite|width|height) [+|-]<number> [--window-id <window_id>]
 
     | run-callback [--for-every-window|--window-id <window_id>]... on-window-detected [--for-every-window|--window-id <window_id>]...
@@ -147,6 +149,7 @@ aerospace -h;
     | --app-bundle-id <app_bundle_id>
     ;
 <output_format> ::= {{{ true }}};
+<app_bundle> ::= {{{ true }}};
 
 <app_bundle_id> ::= {{{ aerospace list-apps --format '%{app-bundle-id}%{tab}%{app-name}' }}};
 <pid> ::= {{{ aerospace list-apps --format '%{app-pid}%{tab}%{app-name}' }}};

@@ -1,0 +1,50 @@
+= aerospace-restart(1)
+include::util/man-attributes.adoc[]
+:manname: aerospace-restart
+// tag::purpose[]
+:manpurpose: Restart AeroSpace.app keeping all windows where they are
+// end::purpose[]
+
+// =========================================================== Synopsis
+== Synopsis
+[verse]
+// tag::synopsis[]
+aerospace restart [-h|--help] [--install <app-bundle>]
+
+// end::synopsis[]
+
+// =========================================================== Description
+== Description
+
+// tag::body[]
+{manpurpose}
+
+The running AeroSpace.app saves its state (workspaces, their window trees and layouts, floating windows,
+the visible workspace of every monitor, focus) and launches a new instance of the AeroSpace.app bundle from disk.
+Once the new instance has started, and is allowed to use the accessibility API, the old one exits
+without showing the windows of invisible workspaces, and the new instance restores the saved state.
+Use it after installing a new version of AeroSpace.app, or let it install the new version with `--install`.
+
+If the new instance doesn't start, the running AeroSpace.app keeps running and the command fails.
+
+The command returns once the new instance accepts commands.
+
+AeroSpace.app also saves the state while it runs and on quit, so that the next start (after a crash, or after
+quitting and launching AeroSpace.app again) puts windows back into their workspaces.
+Windows are restored only if they still belong to the same running application process.
+
+// =========================================================== Options
+include::./util/conditional-options-header.adoc[]
+
+-h, --help:: Print help
+
+--install <app-bundle>::
+Before restarting, replace the running AeroSpace.app bundle with `<app-bundle>` (an absolute path; the bundle is copied).
+`<app-bundle>` must be signed so that it satisfies the code signing requirement of the running AeroSpace.app,
+which keeps the accessibility permission valid for it.
+If the new version doesn't start, the previous bundle is put back and the running AeroSpace.app keeps running.
+
+// end::body[]
+
+// =========================================================== Footer
+include::util/man-footer.adoc[]

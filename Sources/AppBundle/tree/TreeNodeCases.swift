@@ -26,7 +26,7 @@ enum TilingTreeNodeCases {
     case tilingContainer(TilingContainer)
 }
 
-enum NonLeafTreeNodeKind: Equatable {
+enum NonLeafTreeNodeKind: String, Equatable, Codable {
     case tilingContainer
     case workspace
     case macosMinimizedWindowsContainer

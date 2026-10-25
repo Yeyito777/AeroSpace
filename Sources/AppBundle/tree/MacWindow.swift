@@ -24,12 +24,15 @@ final class MacWindow: Window {
     static func getOrRegister(windowId: UInt32, macApp: MacApp) async throws -> MacWindow {
         if let existing = allWindowsMap[windowId] { return existing }
         let rect = try await macApp.getAxRect(windowId, .cancellable)
+        // The window was managed by the previous AeroSpace instance. See persistentWorld.swift
+        let placement = pendingWindowPlacement(windowId: windowId, app: macApp)
         let data = try await unbindAndGetBindingDataForNewWindow(
             windowId,
             macApp,
-            isStartup
-                ? (rect?.center.monitorApproximation ?? mainMonitor).activeWorkspace
-                : focus.workspace,
+            placement.map { Workspace.get(byName: $0.workspace) }
+                ?? (isStartup
+                    ? (rect?.center.monitorApproximation ?? mainMonitor).activeWorkspace
+                    : focus.workspace),
             window: nil,
             .cancellable,
         )
@@ -40,7 +43,10 @@ final class MacWindow: Window {
         allWindowsMap[windowId] = window
 
         try await debugWindowsIfRecording(window, .cancellable)
-        if try await !restoreClosedWindowsCacheIfNeeded(newlyDetectedWindow: window) {
+        if let placement {
+            // Not a new window. Don't run on-window-detected callbacks, they would move it from where it was
+            try await applyWindowPlacement(window, placement)
+        } else if try await !restoreClosedWindowsCacheIfNeeded(newlyDetectedWindow: window) {
             await tryOnWindowDetected(window)
         }
         return window
@@ -135,7 +141,11 @@ final class MacWindow: Window {
             if !isHiddenInCorner {
                 let topLeftCorner = windowRect.topLeftCorner
                 let monitorRect = windowRect.center.monitorApproximation.rect // Similar to layoutFloatingWindow. Non idempotent
-                let absolutePoint = topLeftCorner - monitorRect.topLeftCorner
+                // A previous AeroSpace instance might have left the window in the corner (restart, crash).
+                // The corner is not where the window should come back to
+                let absolutePoint = isParkedInCorner(windowRect, nodeMonitor)
+                    ? CGPoint(x: (monitorRect.width - windowRect.width) / 2, y: (monitorRect.height - windowRect.height) / 2)
+                    : topLeftCorner - monitorRect.topLeftCorner
                 prevUnhiddenProportionalPositionInsideWorkspaceRect =
                     CGPoint(x: absolutePoint.x / monitorRect.width, y: absolutePoint.y / monitorRect.height)
                 if isFloating {
@@ -158,6 +168,25 @@ final class MacWindow: Window {
                 p = nodeMonitor.visibleRect.bottomRightCorner - onePixelOffset
         }
         setAxFrame(p, nil)
+    }
+
+    @MainActor
+    private func isParkedInCorner(_ windowRect: Rect, _ monitor: Monitor) -> Bool {
+        let visibleRect = monitor.visibleRect
+        let parkedPositions = [
+            visibleRect.bottomRightCorner - CGPoint(x: 1, y: 1),
+            visibleRect.bottomLeftCorner + CGPoint(x: 1 - windowRect.width, y: -1),
+        ]
+        return parkedPositions.contains { ($0 - windowRect.topLeftCorner).vectorLength <= 2 }
+    }
+
+    /// See FrozenWindow.unhiddenProportionalPosition
+    var unhiddenProportionalPosition: CGPoint? { prevUnhiddenProportionalPositionInsideWorkspaceRect }
+
+    /// Restores the hidden in corner state of the window that the previous AeroSpace instance hid
+    @MainActor
+    func restoreHiddenInCorner(unhiddenProportionalPosition: CGPoint) {
+        prevUnhiddenProportionalPositionInsideWorkspaceRect = unhiddenProportionalPosition
     }
 
     @MainActor
