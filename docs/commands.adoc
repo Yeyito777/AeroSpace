@@ -231,6 +231,13 @@ include::aerospace-reload-config.adoc[tags=synopsis]
 include::aerospace-reload-config.adoc[tags=purpose]
 include::aerospace-reload-config.adoc[tags=body]
 
+== restart
+----
+include::aerospace-restart.adoc[tags=synopsis]
+----
+include::aerospace-restart.adoc[tags=purpose]
+include::aerospace-restart.adoc[tags=body]
+
 == resize
 ----
 include::aerospace-resize.adoc[tags=synopsis]

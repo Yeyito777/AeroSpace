@@ -3,41 +3,56 @@ import Common
 
 final class MacWindow: Window {
     let macApp: MacApp
+    /// Order of registration. See isDeadAfterWindowsSnapshot
+    let registrationIndex: UInt64
     private var prevUnhiddenProportionalPositionInsideWorkspaceRect: CGPoint?
 
     @MainActor
     private init(_ id: UInt32, _ actor: MacApp, lastFloatingSize: CGSize?, parent: NonLeafTreeNodeObject, adaptiveWeight: CGFloat, index: Int) {
         self.macApp = actor
+        self.registrationIndex = MacWindow.registrationCount
+        MacWindow.registrationCount += 1
         super.init(id: id, actor, lastFloatingSize: lastFloatingSize, parent: parent, adaptiveWeight: adaptiveWeight, index: index)
     }
 
     @MainActor static var allWindowsMap: [UInt32: MacWindow] = [:]
     @MainActor static var allWindows: [MacWindow] { Array(allWindowsMap.values) }
+    @MainActor private(set) static var registrationCount: UInt64 = 0
 
     @MainActor
     @discardableResult
-    static func getOrRegister(windowId: UInt32, macApp: MacApp) async throws -> MacWindow {
+    static func getOrRegister(windowId: UInt32, macApp: MacApp, prefetched: NewWindowDescription? = nil) async throws -> MacWindow {
         if let existing = allWindowsMap[windowId] { return existing }
-        let rect = try await macApp.getAxRect(windowId, .cancellable)
+        let rect = if let prefetched { prefetched.rect } else { try await macApp.getAxRect(windowId, .cancellable) }
+        markWindowDetection("\(windowId) rect")
+        // The window was managed by the previous AeroSpace instance. See persistentWorld.swift
+        let placement = pendingWindowPlacement(windowId: windowId, app: macApp)
         let data = try await unbindAndGetBindingDataForNewWindow(
             windowId,
             macApp,
-            isStartup
-                ? (rect?.center.monitorApproximation ?? mainMonitor).activeWorkspace
-                : focus.workspace,
+            placement.map { Workspace.get(byName: $0.workspace) }
+                ?? (isStartup
+                    ? (rect?.center.monitorApproximation ?? mainMonitor).activeWorkspace
+                    : focus.workspace),
             window: nil,
             .cancellable,
+            prefetchedType: prefetched?.type,
         )
 
         // atomic synchronous section
         if let existing = allWindowsMap[windowId] { return existing }
         let window = MacWindow(windowId, macApp, lastFloatingSize: rect?.size, parent: data.parent, adaptiveWeight: data.adaptiveWeight, index: data.index)
         allWindowsMap[windowId] = window
+        markWindowDetection("classified")
 
         try await debugWindowsIfRecording(window, .cancellable)
-        if try await !restoreClosedWindowsCacheIfNeeded(newlyDetectedWindow: window) {
+        if let placement {
+            // Not a new window. Don't run on-window-detected callbacks, they would move it from where it was
+            try await applyWindowPlacement(window, placement)
+        } else if try await !restoreClosedWindowsCacheIfNeeded(newlyDetectedWindow: window) {
             await tryOnWindowDetected(window)
         }
+        markWindowDetection("detected")
         return window
     }
 
@@ -130,7 +145,11 @@ final class MacWindow: Window {
             if !isHiddenInCorner {
                 let topLeftCorner = windowRect.topLeftCorner
                 let monitorRect = windowRect.center.monitorApproximation.rect // Similar to layoutFloatingWindow. Non idempotent
-                let absolutePoint = topLeftCorner - monitorRect.topLeftCorner
+                // A previous AeroSpace instance might have left the window in the corner (restart, crash).
+                // The corner is not where the window should come back to
+                let absolutePoint = isParkedInCorner(windowRect, nodeMonitor)
+                    ? CGPoint(x: (monitorRect.width - windowRect.width) / 2, y: (monitorRect.height - windowRect.height) / 2)
+                    : topLeftCorner - monitorRect.topLeftCorner
                 prevUnhiddenProportionalPositionInsideWorkspaceRect =
                     CGPoint(x: absolutePoint.x / monitorRect.width, y: absolutePoint.y / monitorRect.height)
                 if isFloating {
@@ -153,6 +172,25 @@ final class MacWindow: Window {
                 p = nodeMonitor.visibleRect.bottomRightCorner - onePixelOffset
         }
         setAxFrame(p, nil)
+    }
+
+    @MainActor
+    private func isParkedInCorner(_ windowRect: Rect, _ monitor: Monitor) -> Bool {
+        let visibleRect = monitor.visibleRect
+        let parkedPositions = [
+            visibleRect.bottomRightCorner - CGPoint(x: 1, y: 1),
+            visibleRect.bottomLeftCorner + CGPoint(x: 1 - windowRect.width, y: -1),
+        ]
+        return parkedPositions.contains { ($0 - windowRect.topLeftCorner).vectorLength <= 2 }
+    }
+
+    /// See FrozenWindow.unhiddenProportionalPosition
+    var unhiddenProportionalPosition: CGPoint? { prevUnhiddenProportionalPositionInsideWorkspaceRect }
+
+    /// Restores the hidden in corner state of the window that the previous AeroSpace instance hid
+    @MainActor
+    func restoreHiddenInCorner(unhiddenProportionalPosition: CGPoint) {
+        prevUnhiddenProportionalPositionInsideWorkspaceRect = unhiddenProportionalPosition
     }
 
     @MainActor
@@ -212,9 +250,23 @@ extension Window {
 
 // The function is private because it's unsafe. It leaves the window in unbound state
 @MainActor
-private func unbindAndGetBindingDataForNewWindow(_ windowId: UInt32, _ macApp: MacApp, _ workspace: Workspace, window: Window?, _ cm: CancellationMode) async throws -> BindingData {
-    let windowLevel = getWindowLevel(for: windowId)
-    return switch try await macApp.getAxUiElementWindowType(windowId, windowLevel, cm) {
+private func unbindAndGetBindingDataForNewWindow(
+    _ windowId: UInt32,
+    _ macApp: MacApp,
+    _ workspace: Workspace,
+    window: Window?,
+    _ cm: CancellationMode,
+    prefetchedType: AxUiElementWindowType? = nil,
+) async throws -> BindingData {
+    let type: AxUiElementWindowType
+    if let prefetchedType {
+        type = prefetchedType
+    } else {
+        let windowLevel = getWindowLevel(for: windowId)
+        markWindowDetection("level")
+        type = try await macApp.getAxUiElementWindowType(windowId, windowLevel, cm)
+    }
+    return switch type {
         case .popup: BindingData(parent: macosPopupWindowsContainer, adaptiveWeight: WEIGHT_AUTO, index: INDEX_BIND_LAST)
         case .dialog: BindingData(parent: workspace.floatingWindowsContainer, adaptiveWeight: WEIGHT_AUTO, index: INDEX_BIND_LAST)
         case .window: unbindAndGetBindingDataForNewTilingWindow(workspace, window: window)
@@ -260,6 +312,7 @@ func onWindowDetected(_ env: CmdEnv, _ io: CmdIo, _ window: Window) async -> Int
         appBundleId: window.app.rawAppBundleId,
         appName: window.app.name,
     ))
+    markWindowDetection("broadcast")
     var lastExitCode = Int32ExitCode.succ
     for callback in config.onWindowDetected where await callback.matches(window) {
         lastExitCode = await callback.run.run(env.withWindowId(window.windowId), io)

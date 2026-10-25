@@ -17,4 +17,11 @@ extension Task  /*This comment breaks the regex in lint.sh*/ {
     ) -> Task<Success, Failure> where Failure == any Error, Success == () {
         .init(operation: operation)
     }
+
+    /// For tasks whose value is awaited
+    public static func startUnstructuredWithValue(
+        @_inheritActorContext _ operation: sending @escaping @isolated(any) () async throws -> Success,
+    ) -> Task<Success, Failure> where Failure == any Error {
+        .init(operation: operation)
+    }
 }

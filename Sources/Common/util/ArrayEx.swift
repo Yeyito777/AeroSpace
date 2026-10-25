@@ -35,8 +35,3 @@ extension Array {
         }
     }
 }
-
-public func - <T>(lhs: [T], rhs: [T]) -> [T] where T: Hashable {
-    let r = rhs.toSet()
-    return lhs.filter { !r.contains($0) }
-}

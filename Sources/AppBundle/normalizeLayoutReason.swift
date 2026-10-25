@@ -8,6 +8,16 @@ func normalizeLayoutReason() async throws {
     try await validateStillPopups()
 }
 
+/// `prefetched` saves AX requests for windows whose state is already known
+@MainActor
+func normalizeLayoutReason(newlyDetectedWindows windows: [Window], prefetched: [UInt32: NewWindowDescription]) async throws {
+    for window in windows {
+        // Popups don't belong to workspaces. validateStillPopups is left to the complete refresh
+        guard let workspace = window.nodeWorkspace else { continue }
+        try await _normalizeLayoutReason(workspace: workspace, windows: [window], prefetched[window.windowId])
+    }
+}
+
 @MainActor
 private func validateStillPopups() async throws {
     for node in macosPopupWindowsContainer.children {
@@ -21,10 +31,14 @@ private func validateStillPopups() async throws {
 }
 
 @MainActor
-private func _normalizeLayoutReason(workspace: Workspace, windows: [Window]) async throws {
+private func _normalizeLayoutReason(workspace: Workspace, windows: [Window], _ prefetched: NewWindowDescription? = nil) async throws {
     for window in windows {
-        let isMacosFullscreen = try await window.isMacosFullscreen(.cancellable)
-        let isMacosMinimized = try await (!isMacosFullscreen).andAsync { @MainActor @Sendable in try await window.isMacosMinimized(.cancellable) }
+        let isMacosFullscreen = if let prefetched { prefetched.isMacosFullscreen } else { try await window.isMacosFullscreen(.cancellable) }
+        let isMacosMinimized = if let prefetched {
+            prefetched.isMacosMinimized
+        } else {
+            try await (!isMacosFullscreen).andAsync { @MainActor @Sendable in try await window.isMacosMinimized(.cancellable) }
+        }
         let isMacosWindowOfHiddenApp = !isMacosFullscreen && !isMacosMinimized &&
             !config.automaticallyUnhideMacosHiddenApps && window.macAppUnsafe.nsApp.isHidden
         switch window.layoutReason {

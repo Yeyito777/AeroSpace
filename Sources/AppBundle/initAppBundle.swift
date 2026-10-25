@@ -9,6 +9,9 @@ private let axMessagingTimeoutSeconds: Float = 0.25
         initTerminationHandler()
         unsafe _isCli = false
         initServerArgs()
+        if let oldPid = serverArgs.restartHandoverPid {
+            await takeOverFromRestartingInstance(oldPid: oldPid)
+        }
         await waitForAccessibilityPermission_nonCancellable()
         configureAxMessagingTimeout()
         if isDebug {
@@ -23,7 +26,12 @@ private let axMessagingTimeoutSeconds: Float = 0.25
         startUnixSocketServer()
         GlobalObserver.initObserver()
         Workspace.garbageCollectUnusedWorkspaces() // init workspaces
-        _ = Workspace.all.first?.focusWorkspace()
+        let savedWorld = PersistentWorld.load()
+        if let savedWorld {
+            prepareStartupRestore(savedWorld)
+        } else {
+            _ = Workspace.all.first?.focusWorkspace()
+        }
         await runHeavyCompleteRefreshSession(
             .startup,
             // It's important for the first initialization to be non cancellable
@@ -31,8 +39,14 @@ private let axMessagingTimeoutSeconds: Float = 0.25
             assumeCancellable: false,
             layoutWorkspaces: false,
         )
+        isWindowDetectionFastPathEnabled = true
+        isPersistentWorldSavingEnabled = true
         try await runLightSession(.startup, .forceRun) {
-            smartLayoutAtStartup()
+            if savedWorld?.allWindows.isEmpty == false {
+                requestNativeFocusSync() // The saved world restored the focus
+            } else {
+                smartLayoutAtStartup()
+            }
             _ = await config.afterStartupCommand.run(.defaultEnv, .emptyStdin)
         }
     }
@@ -73,6 +87,7 @@ var isStartup: Bool { refreshSessionEvent?.isStartup == true }
 struct ServerArgs: Sendable {
     var configLocation: String? = nil
     var isReadOnly: Bool = false
+    var restartHandoverPid: pid_t? = nil
 }
 
 private let serverHelp = """
@@ -85,6 +100,9 @@ private let serverHelp = """
                               and ${XDG_CONFIG_HOME}/aerospace/aerospace.toml
       --read-only             Disable window management.
                               Useful if you want to use only debug-windows or other query commands.
+      --restart-handover <pid>
+                              Internal. Used by 'aerospace restart': take over from the instance <pid>
+                              once it exits.
     """
 
 nonisolated(unsafe) private var _serverArgs = ServerArgs()
@@ -109,6 +127,12 @@ private func initServerArgs() {
                 index += 1
             case "--read-only": // todo rename to '--disabled' and unite with disabled feature
                 unsafe _serverArgs.isReadOnly = true
+            case "--restart-handover":
+                switch args.getOrNil(atIndex: index).flatMap({ pid_t($0) }) {
+                    case let pid?: unsafe _serverArgs.restartHandoverPid = pid
+                    case nil: exit(EXIT_CODE_TWO, err: "Missing or invalid <pid> in --restart-handover flag")
+                }
+                index += 1
             case "-NSDocumentRevisionsDebugMode" where isDebug:
                 // Skip Xcode CLI args.
                 // Usually it's '-NSDocumentRevisionsDebugMode NO'/'-NSDocumentRevisionsDebugMode YES'

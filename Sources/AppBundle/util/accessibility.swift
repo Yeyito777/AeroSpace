@@ -349,9 +349,14 @@ enum AxRequestPhase {
 }
 
 struct AxAppCircuitBreakerState {
-    static let cooldownDuration: Duration = .seconds(1)
+    /// A single timeout is often an app that is busy for a moment (e.g. right after it shows a new window, which
+    /// AeroSpace must detect soon). Apps that keep timing out are skipped for longer
+    static let cooldowns: [Duration] = [.milliseconds(100), .milliseconds(250), .milliseconds(500), .seconds(1)]
+    /// Timeouts further apart start a new streak
+    static let streakWindow: Duration = .seconds(5)
 
     private var unresponsiveUntil: [pid_t: ContinuousClock.Instant] = [:]
+    private var streaks: [pid_t: (count: Int, lastTimeout: ContinuousClock.Instant)] = [:]
 
     mutating func recordTimeout(
         for pid: pid_t,
@@ -359,7 +364,9 @@ struct AxAppCircuitBreakerState {
         phase: AxRequestPhase = .establishedApp,
     ) {
         if phase == .appRegistration { return }
-        unresponsiveUntil[pid] = now.advanced(by: Self.cooldownDuration)
+        let count = streaks[pid].flatMap { now - $0.lastTimeout < Self.streakWindow ? $0.count + 1 : nil } ?? 1
+        streaks[pid] = (count, now)
+        unresponsiveUntil[pid] = now.advanced(by: Self.cooldowns[min(count, Self.cooldowns.count) - 1])
     }
 
     mutating func shouldSkipRequests(

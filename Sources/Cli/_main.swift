@@ -1,7 +1,6 @@
 import Common
 import Darwin
 import Foundation
-import Network
 
 let usage =
     """
@@ -13,7 +12,7 @@ let usage =
 
 @main
 struct Main {
-    static func main() async {
+    static func main() {
         let args = CommandLine.arguments.slice(1...) ?? []
 
         if args.isEmpty {
@@ -24,17 +23,16 @@ struct Main {
         }
 
         if args.first == "--version" || args.first == "-v" {
-            let connection = NWConnection(to: NWEndpoint.unix(path: socketPath), using: .tcp)
             let serverVersionAndHash: String?
-            switch await connection.initConnection().error {
-                case nil:
-                    let ans = await run(connection, [], stdin: "", windowId: nil, workspace: nil, failExitCode: EXIT_CODE_TWO)
+            switch connectToServer() {
+                case .success(let connection):
+                    let ans = run(connection, [], stdin: "", windowId: nil, workspace: nil, failExitCode: EXIT_CODE_TWO)
                     serverVersionAndHash = ans.serverVersionAndHash
-                case .nwError(let e):
-                    eprint(e.localizedDescription)
-                    serverVersionAndHash = nil
-                case .customError(let msg):
+                case .failure(.incompatibleServer(let msg)):
                     exit(EXIT_CODE_TWO, err: msg)
+                case .failure(let e):
+                    eprint(e.description)
+                    serverVersionAndHash = nil
             }
             print(
                 """
@@ -67,14 +65,13 @@ struct Main {
 
         let failExitCode = parsedArgs.failExitCode
 
-        let connection = NWConnection(to: NWEndpoint.unix(path: socketPath), using: .tcp)
-
-        switch await connection.initConnection().error {
-            case nil: break
-            case .customError(let msg):
+        let connection: ServerConnection
+        switch connectToServer() {
+            case .success(let _connection): connection = _connection
+            case .failure(.incompatibleServer(let msg)):
                 exit(failExitCode, err: msg)
-            case .nwError(let e):
-                exit(failExitCode, err: "Can't connect to AeroSpace server. Is AeroSpace.app running?\n\(e.localizedDescription)")
+            case .failure(let e):
+                exit(failExitCode, err: "Can't connect to AeroSpace server. Is AeroSpace.app running?\n\(e.description)")
         }
 
         var stdin = ""
@@ -110,11 +107,11 @@ struct Main {
 
         // Handle subscribe command specially
         if parsedArgs is SubscribeCmdArgs {
-            await runSubscribe(connection, args, windowId: windowId, workspace: workspace, failExitCode: parsedArgs.failExitCode)
+            runSubscribe(connection, args, windowId: windowId, workspace: workspace, failExitCode: parsedArgs.failExitCode)
             exit(EXIT_CODE_ZERO) // Should not reach here
         }
 
-        let ans = await run(connection, args, stdin: stdin, windowId: windowId, workspace: workspace, failExitCode: failExitCode)
+        let ans = run(connection, args, stdin: stdin, windowId: windowId, workspace: workspace, failExitCode: failExitCode)
 
         if !ans.stdout.isEmpty { print(ans.stdout) }
         if !ans.stderr.isEmpty { eprint(ans.stderr) }
@@ -130,17 +127,39 @@ struct Main {
                 """,
             )
         }
+        if parsedArgs is RestartCmdArgs && ans.exitCode == EXIT_CODE_ZERO {
+            waitForRestartedServer(oldServerPid: connection.peerPid, failExitCode: failExitCode)
+        }
         exit(ans.exitCode)
     }
 }
 
-func runSubscribe(_ connection: NWConnection, _ args: StrArrSlice, windowId: UInt32?, workspace: String?, failExitCode: Int32) async {
-    if let e = await connection.writeAtomic(ClientRequest(args: args.toArray(), stdin: "", windowId: windowId, workspace: workspace)).error {
+/// `aerospace restart` returns once the new server accepts commands
+func waitForRestartedServer(oldServerPid: pid_t?, failExitCode: Int32) {
+    let clock = ContinuousClock()
+    let deadline = clock.now + .seconds(30)
+    while clock.now < deadline {
+        if case .success(let connection) = connectToServer(), let pid = connection.peerPid, pid != oldServerPid {
+            return
+        }
+        Thread.sleep(forTimeInterval: 0.02)
+    }
+    exit(failExitCode, err: "The new AeroSpace.app instance doesn't accept commands after 30 seconds")
+}
+
+func connectToServer() -> Result<ServerConnection, ServerConnection.ConnectionError> {
+    ServerConnection.connect(path: socketPath).flatMap { connection in
+        connection.initConnection().map(Result.failure) ?? .success(connection)
+    }
+}
+
+func runSubscribe(_ connection: ServerConnection, _ args: StrArrSlice, windowId: UInt32?, workspace: String?, failExitCode: Int32) {
+    if let e = connection.writeAtomic(ClientRequest(args: args.toArray(), stdin: "", windowId: windowId, workspace: workspace)) {
         exit(failExitCode, err: "Failed to write to server socket: \(e)")
     }
 
     while true {
-        switch await connection.readNonAtomic() {
+        switch connection.readNonAtomic() {
             case .success(let data):
                 if let str = String(data: data, encoding: .utf8) {
                     print(str)
@@ -154,12 +173,12 @@ func runSubscribe(_ connection: NWConnection, _ args: StrArrSlice, windowId: UIn
     }
 }
 
-func run(_ connection: NWConnection, _ args: StrArrSlice, stdin: String, windowId: UInt32?, workspace: String?, failExitCode: Int32) async -> ServerAnswer {
-    if let e = await connection.writeAtomic(ClientRequest(args: args.toArray(), stdin: stdin, windowId: windowId, workspace: workspace)).error {
+func run(_ connection: ServerConnection, _ args: StrArrSlice, stdin: String, windowId: UInt32?, workspace: String?, failExitCode: Int32) -> ServerAnswer {
+    if let e = connection.writeAtomic(ClientRequest(args: args.toArray(), stdin: stdin, windowId: windowId, workspace: workspace)) {
         exit(failExitCode, err: "Failed to write to server socket: \(e)")
     }
 
-    switch await connection.readNonAtomic() {
+    switch connection.readNonAtomic() {
         case .success(let answer):
             return (try? JSONDecoder().decode(ServerAnswer.self, from: answer)) ?? exitT(EXIT_CODE_TWO, err: "Failed to parse server response: \(String(data: answer, encoding: .utf8).prettyDescription)")
         case .failure(let error):
