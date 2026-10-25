@@ -9,6 +9,15 @@ func normalizeLayoutReason() async throws {
 }
 
 @MainActor
+func normalizeLayoutReason(newlyDetectedWindows windows: [Window]) async throws {
+    for window in windows {
+        // Popups don't belong to workspaces. validateStillPopups is left to the complete refresh
+        guard let workspace = window.nodeWorkspace else { continue }
+        try await _normalizeLayoutReason(workspace: workspace, windows: [window])
+    }
+}
+
+@MainActor
 private func validateStillPopups() async throws {
     for node in macosPopupWindowsContainer.children {
         let popup = (node as! MacWindow)

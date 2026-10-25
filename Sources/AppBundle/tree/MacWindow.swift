@@ -3,16 +3,21 @@ import Common
 
 final class MacWindow: Window {
     let macApp: MacApp
+    /// Order of registration. See isDeadAfterWindowsSnapshot
+    let registrationIndex: UInt64
     private var prevUnhiddenProportionalPositionInsideWorkspaceRect: CGPoint?
 
     @MainActor
     private init(_ id: UInt32, _ actor: MacApp, lastFloatingSize: CGSize?, parent: NonLeafTreeNodeObject, adaptiveWeight: CGFloat, index: Int) {
         self.macApp = actor
+        self.registrationIndex = MacWindow.registrationCount
+        MacWindow.registrationCount += 1
         super.init(id: id, actor, lastFloatingSize: lastFloatingSize, parent: parent, adaptiveWeight: adaptiveWeight, index: index)
     }
 
     @MainActor static var allWindowsMap: [UInt32: MacWindow] = [:]
     @MainActor static var allWindows: [MacWindow] { Array(allWindowsMap.values) }
+    @MainActor private(set) static var registrationCount: UInt64 = 0
 
     @MainActor
     @discardableResult

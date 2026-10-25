@@ -34,6 +34,11 @@ func scheduleCancellableCompleteRefreshSession(
     _ event: RefreshSessionEvent,
     optimisticallyPreLayoutWorkspaces: Bool = false,
 ) {
+    let request = WindowDetectionScheduler.CompleteRefreshRequest(
+        event: event,
+        optimisticallyPreLayoutWorkspaces: optimisticallyPreLayoutWorkspaces,
+    )
+    if windowDetectionScheduler.deferCompleteRefreshIfDetecting(request) { return }
     activeRefreshTask?.cancel()
     activeRefreshTask = Task.startUnstructured { @MainActor in
         try checkCancellation()
@@ -43,6 +48,12 @@ func scheduleCancellableCompleteRefreshSession(
             optimisticallyPreLayoutWorkspaces: optimisticallyPreLayoutWorkspaces,
         )
     }
+}
+
+@MainActor
+func cancelActiveCompleteRefresh() {
+    activeRefreshTask?.cancel()
+    activeRefreshTask = nil
 }
 
 @MainActor
@@ -150,11 +161,17 @@ func refreshModel_nonCancellable() async {
 @MainActor
 private func refresh() async throws {
     // Garbage collect terminated apps and windows before working with all windows
+    let registrationsBeforeSnapshot = MacWindow.registrationCount
     let mapping = try await MacApp.refreshAllAndGetAliveWindowIds(frontmostAppBundleId: NSWorkspace.shared.frontmostApplication?.bundleIdentifier)
     let aliveWindowIds = mapping.values.flatMap(id).toSet()
 
     for window in MacWindow.allWindows {
-        if !aliveWindowIds.contains(window.windowId) {
+        if isDeadAfterWindowsSnapshot(
+            windowId: window.windowId,
+            registrationIndex: window.registrationIndex,
+            aliveWindowIds: aliveWindowIds,
+            registrationsBeforeSnapshot: registrationsBeforeSnapshot,
+        ) {
             window.garbageCollect(skipClosedWindowsCache: false)
         }
     }
@@ -166,6 +183,17 @@ private func refresh() async throws {
 
     // Garbage collect workspaces after apps, because workspaces contain apps.
     Workspace.garbageCollectUnusedWorkspaces()
+}
+
+/// A window registered while the snapshot was being taken (e.g. by a window detection session or by
+/// getNativeFocusedWindow of a concurrent session) may be missing from the snapshot, but it's not dead
+func isDeadAfterWindowsSnapshot(
+    windowId: UInt32,
+    registrationIndex: UInt64,
+    aliveWindowIds: Set<UInt32>,
+    registrationsBeforeSnapshot: UInt64,
+) -> Bool {
+    !aliveWindowIds.contains(windowId) && registrationIndex < registrationsBeforeSnapshot
 }
 
 func refreshObs(_: AXObserver, _: AXUIElement, notif: CFString, _: UnsafeMutableRawPointer?) {
@@ -181,7 +209,7 @@ enum OptimalHideCorner {
 }
 
 @MainActor
-private func layoutWorkspaces() async throws {
+func layoutWorkspaces() async throws {
     if !TrayMenuModel.shared.isEnabled {
         for workspace in Workspace.all {
             workspace.allLeafWindowsRecursive.forEach { ($0 as! MacWindow).unhideFromCorner() } // todo as!

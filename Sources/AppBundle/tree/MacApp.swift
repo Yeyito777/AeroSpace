@@ -73,7 +73,8 @@ final class MacApp: AbstractApp {
             $axTaskLocalAppThreadToken.withValue(AxAppThreadToken(pid: pid, idForDebug: nsApp.idForDebug)) {
                 let axApp = AXUIElementCreateApplication(nsApp.processIdentifier)
                 let handlers: HandlerToNotifKeyMapping = unsafe [
-                    (refreshObs, [kAXWindowCreatedNotification, kAXFocusedWindowChangedNotification]),
+                    (windowCreatedObs, [kAXWindowCreatedNotification]),
+                    (refreshObs, [kAXFocusedWindowChangedNotification]),
                 ]
                 let job = RunLoopJob(.cancellable)
                 let subscriptions = (try? unsafe AxSubscription.bulkSubscribe(
@@ -321,6 +322,14 @@ final class MacApp: AbstractApp {
                 }
             }
             return result
+        }
+    }
+
+    /// Registers windows of this app that AeroSpace doesn't know yet. Dead windows are left to the complete refresh
+    @MainActor func registerNewWindows() async throws {
+        let frontmostAppBundleId = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        for windowId in try await refreshAndGetAliveWindowIds(frontmostAppBundleId: frontmostAppBundleId) {
+            try await MacWindow.getOrRegister(windowId: windowId, macApp: self)
         }
     }
 

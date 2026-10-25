@@ -31,6 +31,7 @@ private let axMessagingTimeoutSeconds: Float = 0.25
             assumeCancellable: false,
             layoutWorkspaces: false,
         )
+        isWindowDetectionFastPathEnabled = true
         try await runLightSession(.startup, .forceRun) {
             smartLayoutAtStartup()
             _ = await config.afterStartupCommand.run(.defaultEnv, .emptyStdin)
