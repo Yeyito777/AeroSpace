@@ -136,6 +136,8 @@ on-mode-changed = []
 
     # Type an em dash in whichever application currently has keyboard focus.
     ctrl-minus = 'exec-and-forget /Users/yeyito/.config/aerospace/type-em-dash.sh'
+    # Ctrl+1/2/3 (• ← →) are Karabiner rules onto keys of the ABC Symbols
+    # keyboard layout, so they repeat natively; see helper-tools/symbol-keys.
 
     # See: https://nikitabobko.github.io/AeroSpace/commands#workspace
     alt-1 = 'workspace 1'

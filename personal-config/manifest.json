@@ -1,6 +1,6 @@
 {
   "aerospace.toml": {
-    "sha256": "6eb15e6c1cb059c6539545cc3dda7073c0920be0c036ec6c4d35c42c172df86f",
+    "sha256": "359ca6a99df6488e76d8b03bf7a9a711e89dec7db683e9308a228b7955b15861",
     "source": "~/.aerospace.toml"
   },
   "aerospace/close-window-stay-workspace.sh": {
@@ -16,7 +16,7 @@
     "source": "~/.config/aerospace/delete-numeric-workspace.sh"
   },
   "aerospace/launch-exocortex.sh": {
-    "sha256": "fe33da0671b8a07b40b351054910ee89ab45aab56a4d81be2903ba91b5088a2d",
+    "sha256": "05a22f92c6d53f9ea432c94412633ec4f62f701ad07ba241c295c9a860e6b092",
     "source": "~/.config/aerospace/launch-exocortex.sh"
   },
   "aerospace/move-window-fully-left.sh": {
@@ -52,7 +52,7 @@
     "source": "~/Library/LaunchAgents/com.yeyito.swap-command-option.plist"
   },
   "scripts/st-aerospace-launch": {
-    "sha256": "b4c77c4414a7317089a39745a5d3c614d646c8254ab69fd13f758a876e39cafd",
+    "sha256": "046d7ad5851ee4e57d8f0c43984a22964ba0d8b7362504f9283323014ddc4079",
     "source": "~/Applications/st.app/Contents/Resources/bin/st-aerospace-launch"
   },
   "scripts/st-shell-context.zsh": {
@@ -60,7 +60,7 @@
     "source": "~/Applications/st.app/Contents/Resources/bin/st-shell-context.zsh"
   },
   "tests/test_aerospace_launcher.sh": {
-    "sha256": "4463b15b952b7fdf5a5145208693912f6f3b9a72e5127620bfd52e231458e9fb",
+    "sha256": "dcd75cc010c2ecd8f5512a63bb7fe3a6910bb225d8e890511eefaf3e837b4b4a",
     "source": "~/Desktop/st/tests/test_aerospace_launcher.sh"
   },
   "tests/test_shell_context.zsh": {

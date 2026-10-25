@@ -1,52 +1,47 @@
 #!/bin/sh
+# Open an st window on the focused AeroSpace workspace, focused and revealed.
+#
+# Usage: st-aerospace-launch [--inherit-cwd | --cwd DIR] [-T TITLE]
+#                            [-e COMMAND [ARG ...]]
+#
+# The expensive part of a launch (AppKit, Metal, fonts, window; ~0.5 s) is
+# done ahead of time by a warm spare: `st --spare` waits, windowless and
+# shell-less, in $HOME/.runtime/st/spare. The launcher claims it, sends the
+# directory/command/title over its control socket, waits for AeroSpace's
+# window-detected event (no polling) and focuses it. Afterwards it boots the
+# next spare. Without a spare it boots a private one and continues the same
+# way. ST_AEROSPACE_KEEP_SPARE=0 disables keeping a spare around.
 
 set -u
 
 aerospace="${AEROSPACE_BIN:-/opt/homebrew/bin/aerospace}"
 st_binary="${ST_BINARY:-$HOME/Applications/st.app/Contents/MacOS/st}"
-poll_interval="${ST_AEROSPACE_POLL_INTERVAL:-0.05}"
-max_attempts="${ST_AEROSPACE_MAX_ATTEMPTS:-80}"
+tick="${ST_AEROSPACE_TICK:-0.25}"
+max_ticks="${ST_AEROSPACE_MAX_TICKS:-24}"
+keep_spare="${ST_AEROSPACE_KEEP_SPARE:-1}"
+runtime="$HOME/.runtime/st"
+slot="$runtime/spare"
+
+usage()
+{
+	printf 'Usage: %s [--inherit-cwd | --cwd DIR] [-T TITLE] [-e COMMAND [ARG ...]]\n' \
+		"$0" >&2
+	exit 64
+}
 
 start_directory=$HOME
-inherit_virtualenv=
-case "${1:-}" in
-	--inherit-cwd)
-		# Each native st window owns one process and one direct PTY child.
-		# Inspect that child, not st's launch-time cwd or unrelated jobs.
-		focused=$("$aerospace" list-windows --focused \
-			--format '%{app-bundle-id} %{app-pid}' 2>/dev/null)
-		case "$focused" in
-			"io.yeyito.st "*)
-				terminal_pid=${focused#* }
-				case "$terminal_pid" in
-					''|*[!0-9]*) ;;
-					*)
-						child_pid=$(/usr/bin/pgrep -P "$terminal_pid" | sed -n '1p')
-						if [ -n "$child_pid" ]; then
-							directory=$(/usr/sbin/lsof -a -p "$child_pid" -d cwd -Fn 2>/dev/null |
-								sed -n 's/^n//p')
-							if [ -n "$directory" ] && [ -d "$directory" ]; then
-								start_directory=$directory
-							fi
-							context="$HOME/.cache/st-shell-context/$terminal_pid-$child_pid.venv"
-							if [ -f "$context" ] && [ ! -L "$context" ]; then
-								IFS= read -r environment < "$context" || environment=
-								if [ -n "$environment" ] && [ -f "$environment/bin/activate" ]; then
-									inherit_virtualenv=$environment
-								fi
-							fi
-						fi
-						;;
-				esac
-				;;
-		esac
-		;;
-	'') ;;
-	*)
-		printf 'Usage: %s [--inherit-cwd]\n' "$0" >&2
-		exit 64
-		;;
-esac
+inherit_cwd=
+title=
+has_command=
+while [ "$#" -gt 0 ]; do
+	case "$1" in
+		--inherit-cwd) inherit_cwd=1; shift ;;
+		--cwd) [ "$#" -ge 2 ] || usage; start_directory=$2; shift 2 ;;
+		-T) [ "$#" -ge 2 ] || usage; title=$2; shift 2 ;;
+		-e) shift; [ "$#" -gt 0 ] && has_command=1; break ;;
+		*) usage ;;
+	esac
+done
 
 if [ ! -x "$aerospace" ]; then
 	printf 'AeroSpace is not installed at %s\n' "$aerospace" >&2
@@ -56,53 +51,226 @@ if [ ! -x "$st_binary" ]; then
 	printf 'st is not installed at %s\n' "$st_binary" >&2
 	exit 1
 fi
+mkdir -p "$runtime" || exit 1
 
-target_workspace=$("$aerospace" list-workspaces --focused | sed -n '1p')
-if [ -z "$target_workspace" ]; then
-	printf 'Could not determine the focused AeroSpace workspace\n' >&2
+binary_stamp()
+{
+	stat -f '%i:%m' "$st_binary" 2>/dev/null || stat -c '%i:%Y' "$st_binary"
+}
+
+# Events and a 250 ms ticker share one FIFO, so a plain blocking read wakes
+# up for whichever comes first: no polling on the fast path, yet a bounded
+# fallback when AeroSpace never reports the window.
+work=$(mktemp -d "${TMPDIR:-/tmp}/st-aerospace-launch.XXXXXX") || exit 1
+fifo=$work/events
+mkfifo "$fifo" || exit 1
+"$aerospace" subscribe focus-changed window-detected >"$fifo" 2>/dev/null &
+subscriber=$!
+while sleep "$tick"; do echo tick; done >"$fifo" 2>/dev/null &
+ticker=$!
+exec 4<"$fifo"
+
+st_pid=
+private_slot=
+cleanup()
+{
+	kill "$subscriber" "$ticker" 2>/dev/null
+	exec 4<&-
+	[ -n "$private_slot" ] && rm -f "$private_slot"
+	rm -rf "$work"
+}
+fail()
+{
+	printf '%s\n' "$1" >&2
+	[ -n "$st_pid" ] && kill "$st_pid" 2>/dev/null
+	cleanup
 	exit 1
+}
+trap 'fail "st-aerospace-launch interrupted"' INT TERM HUP
+
+if [ -n "$inherit_cwd" ]; then
+	# Each native st window owns one process and one direct PTY child.
+	# Inspect that child, not st's launch-time cwd or unrelated jobs.
+	focused=$("$aerospace" list-windows --focused \
+		--format '%{app-bundle-id} %{app-pid}' 2>/dev/null)
+	case "$focused" in
+		"io.yeyito.st "*)
+			terminal_pid=${focused#* }
+			case "$terminal_pid" in
+				''|*[!0-9]*) ;;
+				*)
+					child_pid=$(/usr/bin/pgrep -P "$terminal_pid" | sed -n '1p')
+					if [ -n "$child_pid" ]; then
+						directory=$(/usr/sbin/lsof -a -p "$child_pid" -d cwd -Fn 2>/dev/null |
+							sed -n 's/^n//p')
+						if [ -n "$directory" ] && [ -d "$directory" ]; then
+							start_directory=$directory
+						fi
+						context="$HOME/.cache/st-shell-context/$terminal_pid-$child_pid.venv"
+						if [ -f "$context" ] && [ ! -L "$context" ]; then
+							IFS= read -r environment < "$context" || environment=
+							if [ -n "$environment" ] && [ -f "$environment/bin/activate" ]; then
+								inherit_virtualenv=$environment
+							fi
+						fi
+					fi
+					;;
+			esac
+			;;
+	esac
 fi
+[ -d "$start_directory" ] || start_directory=$HOME
 
-cd "$start_directory" 2>/dev/null || cd "$HOME" || exit 1
-ST_INHERIT_VIRTUAL_ENV="$inherit_virtualenv" \
-	ST_AEROSPACE_MANAGED=1 nohup "$st_binary" </dev/null >/dev/null 2>&1 &
-st_pid=$!
-
+# Claim the warm spare while the subscription connects. rename(2) is atomic,
+# so concurrent launchers can never claim the same one; a dead or outdated
+# spare is discarded.
+stamp=$(binary_stamp)
 window_id=
-attempt=0
-while [ "$attempt" -lt "$max_attempts" ]; do
-	window_id=$("$aerospace" list-windows --monitor all --pid "$st_pid" \
-		--format '%{window-id}' 2>/dev/null | sed -n '1p')
-	if [ -n "$window_id" ]; then
-		break
+claim=$runtime/spare.claim.$$
+if mv "$slot" "$claim" 2>/dev/null; then
+	read -r spare_pid spare_window spare_stamp < "$claim"
+	rm -f "$claim"
+	if [ "${spare_stamp:-}" = "$stamp" ] && kill -0 "$spare_pid" 2>/dev/null &&
+		[ -S "$runtime/st-$spare_pid/control.sock" ]; then
+		st_pid=$spare_pid
+		window_id=$spare_window
+	else
+		kill "${spare_pid:-}" 2>/dev/null
 	fi
-	attempt=$((attempt + 1))
-	sleep "$poll_interval"
+fi
+
+if [ -z "$st_pid" ]; then
+	# Cold path: boot a private spare and wait until it serves requests.
+	private_slot=$runtime/spare.private.$$
+	(cd "$HOME" && exec nohup "$st_binary" --spare-slot "$private_slot" \
+		</dev/null >/dev/null 2>&1) &
+	booting=$!
+	attempt=0
+	while [ "$attempt" -lt 200 ] && [ ! -s "$private_slot" ] &&
+		kill -0 "$booting" 2>/dev/null; do
+		attempt=$((attempt + 1))
+		sleep 0.02
+	done
+	[ -s "$private_slot" ] && read -r st_pid window_id spare_stamp < "$private_slot"
+	rm -f "$private_slot"
+	[ -n "$st_pid" ] || { st_pid=$booting; fail 'st did not start'; }
+	# AeroSpace gives up registering an app that is busy launching; ask
+	# again now that it answers, so it sees the window as soon as it opens.
+	"$aerospace" list-apps >/dev/null 2>&1
+fi
+
+# The subscription's first line is the focus at invocation time: the
+# workspace this terminal belongs on even if the user switches meanwhile.
+target_workspace=
+while IFS= read -r line <&4; do
+	case "$line" in
+		*'"_event":"focus-changed"'*'"workspace":"'*)
+			target_workspace=${line#*\"workspace\":\"}
+			target_workspace=${target_workspace%%\"*}
+			break
+			;;
+		tick)
+			ticks=$((${ticks:-0} + 1))
+			[ "$ticks" -le "$max_ticks" ] && kill -0 "$subscriber" 2>/dev/null ||
+				break
+			;;
+	esac
 done
+[ -n "$target_workspace" ] ||
+	target_workspace=$("$aerospace" list-workspaces --focused | sed -n '1p')
+[ -n "$target_workspace" ] ||
+	fail 'Could not determine the focused AeroSpace workspace'
 
-if [ -z "$window_id" ]; then
-	kill "$st_pid" 2>/dev/null || true
-	printf 'AeroSpace did not register the st window for PID %s\n' "$st_pid" >&2
-	exit 1
-fi
+# NUL-separated fields. The terminal gets this launcher's environment, as if
+# it had started st itself; the spare's own is just whatever booted it.
+{
+	printf 'spawn\n'
+	printf 'cwd=%s\0' "$start_directory"
+	printf 'environ\0'
+	env -0
+	printf '\0'
+	printf 'env=ST_INHERIT_VIRTUAL_ENV=%s\0' "${inherit_virtualenv:-}"
+	[ -n "$title" ] && printf 'title=%s\0' "$title"
+	if [ -n "$has_command" ]; then
+		for argument do
+			printf 'arg=%s\0' "$argument"
+		done
+	fi
+	printf 'end\0'
+} | nc -U "$runtime/st-$st_pid/control.sock" ||
+	fail "Could not reach st process $st_pid"
 
-if ! "$aerospace" move-node-to-workspace --window-id "$window_id" \
-	"$target_workspace" >/dev/null 2>&1; then
-	kill "$st_pid" 2>/dev/null || true
-	printf 'AeroSpace could not move st window %s to workspace %s\n' \
-		"$window_id" "$target_workspace" >&2
-	exit 1
-fi
+window_workspace=
+detected=
+ticks=0
+next_query=2
+while IFS= read -r line <&4; do
+	case "$line" in
+		*'"_event":"window-detected"'*'"windowId":'"$window_id"[,}]*)
+			case "$line" in
+				*'"workspace":"'*)
+					window_workspace=${line#*\"workspace\":\"}
+					window_workspace=${window_workspace%%\"*}
+					;;
+			esac
+			detected=1
+			break
+			;;
+		tick)
+			ticks=$((ticks + 1))
+			[ "$ticks" -le "$max_ticks" ] || break
+			[ "$ticks" -eq "$next_query" ] || continue
+			# No event yet: the query's session ends in the full refresh
+			# that registers apps and detects windows. Back off: each query
+			# also cancels a refresh that is still running.
+			next_query=$((next_query * 2))
+			found=$("$aerospace" list-windows --monitor all --pid "$st_pid" \
+				--format '%{window-id} %{workspace}' 2>/dev/null | sed -n '1p')
+			case "$found" in
+				"$window_id "*)
+					window_workspace=${found#* }
+					detected=1
+					break
+					;;
+			esac
+			;;
+	esac
+done
+[ -n "$detected" ] ||
+	fail "AeroSpace did not register the st window for PID $st_pid"
 
-if ! "$aerospace" focus --window-id "$window_id" >/dev/null 2>&1; then
-	kill "$st_pid" 2>/dev/null || true
-	printf 'AeroSpace could not focus st window %s\n' "$window_id" >&2
-	exit 1
+if [ "$window_workspace" = "$target_workspace" ]; then
+	"$aerospace" focus --window-id "$window_id" >/dev/null 2>&1 ||
+		fail "AeroSpace could not focus st window $window_id"
+else
+	"$aerospace" move-node-to-workspace --focus-follows-window \
+		--window-id "$window_id" "$target_workspace" >/dev/null 2>&1 ||
+		fail "AeroSpace could not move st window $window_id to workspace $target_workspace"
 fi
 
 # Managed st windows stay transparent until AeroSpace has finished both layout
 # and native focus. SIGUSR1 completes that handshake without a timing guess.
-if ! kill -USR1 "$st_pid" 2>/dev/null; then
-	printf 'st process %s exited before its window could be revealed\n' "$st_pid" >&2
-	exit 1
+kill -USR1 "$st_pid" 2>/dev/null ||
+	fail "st process $st_pid exited before its window could be revealed"
+st_pid=
+cleanup
+trap - INT TERM HUP
+
+# Boot the next spare. Once it serves requests, ask AeroSpace to look at the
+# running apps again: it skipped this one while it was busy launching, and a
+# registered app's new window is reported at once.
+if [ "$keep_spare" = 1 ] && [ ! -e "$slot" ]; then
+	(cd "$HOME" && exec nohup "$st_binary" --spare \
+		</dev/null >/dev/null 2>&1) &
+	spare=$!
+	attempt=0
+	while [ "$attempt" -lt 250 ] && kill -0 "$spare" 2>/dev/null; do
+		holder=
+		[ -s "$slot" ] && read -r holder _ < "$slot"
+		[ "$holder" = "$spare" ] && break
+		attempt=$((attempt + 1))
+		sleep 0.02
+	done
+	"$aerospace" list-apps >/dev/null 2>&1
 fi
+exit 0

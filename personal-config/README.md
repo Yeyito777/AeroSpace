@@ -42,8 +42,9 @@ if your home directory differs. AeroSpace executable paths in bindings must
 be absolute; `~` is not expanded there.
 
 1. Install this AeroSpace fork and the native macOS st fork. The st launcher
-   requires the managed-window reveal handshake (`ST_AEROSPACE_MANAGED` and
-   `SIGUSR1`), so it is not compatible with an arbitrary stock st build.
+   claims a warm `st --spare` and uses the managed-window reveal handshake
+   (`SIGUSR1`), so it is not compatible with an arbitrary stock st build.
+   `launch-exocortex.sh` delegates to the same launcher.
 2. Copy `aerospace.toml` to `~/.aerospace.toml` and the contents of
    `aerospace/` to `~/.config/aerospace/`. Preserve executable permissions.
 3. Copy `scripts/st-aerospace-launch` and `scripts/st-shell-context.zsh` to
