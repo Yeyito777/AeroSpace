@@ -325,21 +325,22 @@ final class MacApp: AbstractApp {
         }
     }
 
-    /// Registers windows of this app that AeroSpace doesn't know yet. Dead windows are left to the complete refresh.
-    /// `createdWindow` is the element of kAXWindowCreatedNotification. It's registered even if the app doesn't list
-    /// it in kAXWindowsAttribute (yet)
-    @MainActor func registerNewWindows(createdWindow: AxElementBox?) async throws -> AxWindowsRefreshReport {
-        let frontmostAppBundleId = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-        let (alive, report) = try await refreshAndGetAliveWindowIds(
-            frontmostAppBundleId: frontmostAppBundleId,
+    /// Fetches the windows of this app (and describes the new ones) for registerWindows. Dead windows are left to the
+    /// complete refresh. `createdWindow` is the element of kAXWindowCreatedNotification. It's registered even if the
+    /// app doesn't list it in kAXWindowsAttribute (yet)
+    @MainActor func fetchWindows(createdWindow: AxElementBox?) async throws -> (alive: [UInt32], report: AxWindowsRefreshReport) {
+        try await refreshAndGetAliveWindowIds(
+            frontmostAppBundleId: NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
             createdWindow: createdWindow,
             describeNewWindows: true,
         )
-        markWindowDetection("ax windows \(report)")
-        for windowId in alive {
-            try await MacWindow.getOrRegister(windowId: windowId, macApp: self, prefetched: report.newWindows[windowId])
+    }
+
+    /// Registers the result of fetchWindows
+    @MainActor func registerWindows(_ fetched: (alive: [UInt32], report: AxWindowsRefreshReport)) async throws {
+        for windowId in fetched.alive {
+            try await MacWindow.getOrRegister(windowId: windowId, macApp: self, prefetched: fetched.report.newWindows[windowId])
         }
-        return report
     }
 
     @MainActor private func refreshAndGetAliveWindowIds(

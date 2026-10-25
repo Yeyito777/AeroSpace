@@ -153,13 +153,20 @@ private func windowDetectionPass(pid: pid_t, createdWindow: AxElementBox?, _ tim
     timing?.mark("main actor")
     let registrationsBefore = MacWindow.registrationCount
 
+    // The app's AX job runs on its own thread meanwhile, usually waiting for the app that has just shown a window.
+    // It doesn't touch the tree: windows are bound only after the focus is synced, as in the complete refresh
+    let fetching = Task.startUnstructuredWithValue { @MainActor in try await app.fetchWindows(createdWindow: createdWindow) }
+    defer { fetching.cancel() } // If getNativeFocusedWindow throws
     let nativeFocused = try await getNativeFocusedWindow(.cancellable)
     if let nativeFocused { try await debugWindowsIfRecording(nativeFocused, .cancellable) }
     updateFocusCache(nativeFocused)
     await refreshModel_nonCancellable()
     timing?.mark("native focus")
 
-    let report = try await app.registerNewWindows(createdWindow: createdWindow)
+    let windows = try await fetching.value
+    let report = windows.report
+    timing?.mark("ax windows \(report)")
+    try await app.registerWindows(windows)
     Workspace.garbageCollectUnusedWorkspaces()
     // Including the window that getNativeFocusedWindow might have registered
     let newWindows = MacWindow.allWindows.filter { $0.registrationIndex >= registrationsBefore }
@@ -171,11 +178,11 @@ private func windowDetectionPass(pid: pid_t, createdWindow: AxElementBox?, _ tim
     // Popups (e.g. tooltips) aren't laid out. Don't double the layout work of the complete refresh for them
     if newWindows.allSatisfy({ $0.parent is MacosPopupWindowsContainer }) { return false }
 
-    updateTrayText()
     try await normalizeLayoutReason(newlyDetectedWindows: newWindows, prefetched: report.newWindows)
     timing?.mark("layout reason")
     try await layoutWorkspaces()
     timing?.mark("laid out")
+    updateTrayText()
     return false
 }
 
