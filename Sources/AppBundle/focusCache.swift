@@ -1,3 +1,4 @@
+import AppKit
 import Common
 
 private let clock = ContinuousClock()
@@ -121,7 +122,24 @@ func isNativeFocusFallbackForVanishedWindow(
     focusedWindowId != nativeFocusedWindowId && !windowExists(focusedWindowId)
 }
 
+/// A native focus change to another workspace that AeroSpace declined. macOS doesn't always let AeroSpace take the
+/// native focus back (cooperative app activation: e.g. not from the app the user last typed in), so the declined window
+/// may stay focused. Seeing it again in a later refresh isn't new user intent. It's forgotten once the native focus
+/// moves elsewhere or the user leaves the workspace
+struct DeclinedNativeFocus: Equatable {
+    let windowId: UInt32
+    let appPid: Int32
+    let workspaceName: String
+
+    func stillHolds(nativeFocusedWindowId: UInt32?, frontmostAppPid: Int32?, currentWorkspaceName: String) -> Bool {
+        if currentWorkspaceName != workspaceName { return false }
+        // AX may fail to report the focused window of an app that is still frontmost
+        return nativeFocusedWindowId.map { $0 == windowId } ?? (frontmostAppPid == appPid)
+    }
+}
+
 @MainActor private var lastKnownNativeFocusedWindowId: UInt32? = nil
+@MainActor private var declinedNativeFocus: DeclinedNativeFocus? = nil
 @MainActor private var raceProtection = NativeFocusRaceProtection()
 @MainActor private var deferredNativeFocusTask: Task<(), Never>? = nil
 
@@ -180,6 +198,13 @@ private func reassertIntendedNativeFocus() {
     if nativeFocused?.parent is MacosPopupWindowsContainer {
         return
     }
+    if let declined = declinedNativeFocus, !declined.stillHolds(
+        nativeFocusedWindowId: nativeFocused?.windowId,
+        frontmostAppPid: isUnitTest ? nil : NSWorkspace.shared.frontmostApplication?.processIdentifier,
+        currentWorkspaceName: focus.workspace.name,
+    ) {
+        declinedNativeFocus = nil
+    }
     guard nativeFocused?.windowId != lastKnownNativeFocusedWindowId else {
         updateLastNativeFocusedWindow(nativeFocused)
         return
@@ -197,8 +222,13 @@ private func reassertIntendedNativeFocus() {
     let appPid = nativeFocused.app.pid
     FocusTrace.log("native focus \(nativeFocused.traceDescription), focus \(focus.traceDescription)")
 
+    let decline = DeclinedNativeFocus(windowId: nativeFocused.windowId, appPid: appPid, workspaceName: currentWorkspaceName)
     if nativeWorkspaceName == currentWorkspaceName {
         raceProtection.clearAppActivation(appPid: appPid)
+    } else if declinedNativeFocus == decline {
+        FocusTrace.log("  suppressed: still the focus that was declined")
+        reassertIntendedNativeFocus()
+        return
     } else if let vanished = focus.windowOrNil as? MacWindow,
               isNativeFocusFallbackForVanishedWindow(
                   focusedWindowId: vanished.windowId,
@@ -211,6 +241,7 @@ private func reassertIntendedNativeFocus() {
         // protections below can't cover it: the app may take any time to quit
         FocusTrace.log("  focused window \(vanished.windowId) is gone: macOS replacement, collecting it")
         vanished.garbageCollect(skipClosedWindowsCache: false)
+        declinedNativeFocus = decline
         reassertIntendedNativeFocus()
         return
     } else if raceProtection.shouldSuppressAfterWorkspaceSwitch(
@@ -218,6 +249,7 @@ private func reassertIntendedNativeFocus() {
         nativeWorkspaceName: nativeWorkspaceName,
     ) {
         FocusTrace.log("  suppressed: workspace switch protection")
+        declinedNativeFocus = decline
         reassertIntendedNativeFocus()
         return
     } else if raceProtection.shouldSuppressAfterClose(
@@ -228,6 +260,7 @@ private func reassertIntendedNativeFocus() {
         // replacement leaves that hidden-workspace app frontmost, and a later
         // refresh can mistake the stale replacement for user intent.
         FocusTrace.log("  suppressed: close protection")
+        declinedNativeFocus = decline
         reassertIntendedNativeFocus()
         return
     } else if let delay = raceProtection.appActivationDelay(

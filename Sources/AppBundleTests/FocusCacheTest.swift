@@ -161,4 +161,19 @@ final class FocusCacheTest: XCTestCase {
         // Raycast, Spotlight, or AeroSpace itself
         XCTAssertFalse(shouldHoldNativeFocusForEmptyWorkspace(frontmostAppPid: 11, isFrontmostAppRegular: false, deadWindowAppPid: 10))
     }
+
+    func testDeclinedNativeFocusHoldsUntilNativeFocusMoves() {
+        let declined = DeclinedNativeFocus(windowId: 7, appPid: 70, workspaceName: "a")
+        // macOS kept the declined window focused: a later refresh must not take it for user intent
+        XCTAssertTrue(declined.stillHolds(nativeFocusedWindowId: 7, frontmostAppPid: 70, currentWorkspaceName: "a"))
+        // AX couldn't tell the focused window, but the declined app is still frontmost
+        XCTAssertTrue(declined.stillHolds(nativeFocusedWindowId: nil, frontmostAppPid: 70, currentWorkspaceName: "a"))
+
+        // The native focus moved: AeroSpace took it, or the user focused another window or app
+        XCTAssertFalse(declined.stillHolds(nativeFocusedWindowId: 8, frontmostAppPid: 70, currentWorkspaceName: "a"))
+        XCTAssertFalse(declined.stillHolds(nativeFocusedWindowId: nil, frontmostAppPid: 71, currentWorkspaceName: "a"))
+        XCTAssertFalse(declined.stillHolds(nativeFocusedWindowId: nil, frontmostAppPid: nil, currentWorkspaceName: "a"))
+        // The user left the workspace
+        XCTAssertFalse(declined.stillHolds(nativeFocusedWindowId: 7, frontmostAppPid: 70, currentWorkspaceName: "b"))
+    }
 }
