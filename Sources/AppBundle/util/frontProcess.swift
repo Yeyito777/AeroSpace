@@ -8,7 +8,7 @@ import Common
 // window of an invisible workspace.
 //
 // The window server's front process call (SkyLight, private) isn't subject to cooperative activation. yabai uses it to
-// focus windows. Both symbols are looked up at runtime: without them, only the public activation is attempted
+// focus windows. It's used only after macOS refused the public activation. Both symbols are looked up at runtime
 
 private typealias SetFrontProcessWithOptions = @convention(c) (UnsafeMutablePointer<ProcessSerialNumber>, UInt32, UInt32) -> Int32
 private typealias GetProcessForPid = @convention(c) (pid_t, UnsafeMutablePointer<ProcessSerialNumber>) -> OSStatus
@@ -30,13 +30,48 @@ private let getProcessForPid: GetProcessForPid? = {
 private let cpsUserGenerated: UInt32 = 0x200
 private let cpsNoWindows: UInt32 = 0x400
 
-/// Makes AeroSpace the active app, even when macOS's cooperative activation would refuse it
+/// How long macOS gets to honor the cooperative activation before AeroSpace forces it. Activation takes ~10 ms
+private let cooperativeActivationGrace: Duration = .milliseconds(50)
+@MainActor private var focusSinkCheck: Task<(), Never>? = nil
+
+/// Makes AeroSpace the active app, even when macOS's cooperative activation refuses it
 @MainActor
 func activateAeroSpaceAsFocusSink() {
     NSApp.activate(ignoringOtherApps: true)
-    if !setFrontProcess(pid: myPid, mode: cpsUserGenerated | cpsNoWindows) {
-        FocusTrace.log("  front process call unavailable or failed; relying on cooperative activation")
+    let workspaceName = focus.workspace.name
+    focusSinkCheck?.cancel()
+    focusSinkCheck = Task.startUnstructured { @MainActor in
+        try? await Task.sleep(for: cooperativeActivationGrace)
+        if Task.isCancelled { return }
+        let frontmost = NSWorkspace.shared.frontmostApplication
+        guard shouldForceFocusSink(
+            frontmostAppPid: frontmost?.processIdentifier,
+            isFrontmostAppRegular: frontmost?.activationPolicy == .regular,
+            isFocusedWorkspaceEmpty: focus.windowOrNil == nil,
+            focusedWorkspaceName: focus.workspace.name,
+            requestedWorkspaceName: workspaceName,
+        ) else { return }
+        let refusedBy = frontmostAppTraceDescription
+        let forced = setFrontProcess(pid: myPid, mode: cpsUserGenerated | cpsNoWindows)
+        FocusTrace.log("macOS refused to activate AeroSpace (frontmost \(refusedBy)): front process call \(forced ? "made" : "failed")")
+        if forced {
+            try? await Task.sleep(for: cooperativeActivationGrace)
+            FocusTrace.log("  frontmost after forcing: \(frontmostAppTraceDescription)")
+        }
     }
+}
+
+/// Whether macOS refused the focus sink activation and it's still wanted. A utility popup (Raycast, Spotlight) that
+/// the user opened meanwhile keeps the focus
+func shouldForceFocusSink(
+    frontmostAppPid: pid_t?,
+    isFrontmostAppRegular: Bool,
+    isFocusedWorkspaceEmpty: Bool,
+    focusedWorkspaceName: String,
+    requestedWorkspaceName: String,
+) -> Bool {
+    guard let frontmostAppPid, frontmostAppPid != myPid, isFrontmostAppRegular else { return false }
+    return isFocusedWorkspaceEmpty && focusedWorkspaceName == requestedWorkspaceName
 }
 
 /// Returns false if the call is unavailable or failed

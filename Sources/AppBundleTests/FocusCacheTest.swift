@@ -188,4 +188,26 @@ final class FocusCacheTest: XCTestCase {
             now: now,
         ))
     }
+
+    func testFocusSinkIsForcedOnlyWhenRefusedAndStillWanted() {
+        func force(_ pid: pid_t?, regular: Bool = true, empty: Bool = true, workspace: String = "a") -> Bool {
+            shouldForceFocusSink(
+                frontmostAppPid: pid,
+                isFrontmostAppRegular: regular,
+                isFocusedWorkspaceEmpty: empty,
+                focusedWorkspaceName: workspace,
+                requestedWorkspaceName: "a",
+            )
+        }
+        // macOS kept another app active
+        XCTAssertTrue(force(myPid + 1))
+        // The activation was honored
+        XCTAssertFalse(force(myPid))
+        XCTAssertFalse(force(nil))
+        // A utility popup (Raycast, Spotlight) took the focus meanwhile
+        XCTAssertFalse(force(myPid + 1, regular: false))
+        // The focus moved on: a window got focused, or another workspace
+        XCTAssertFalse(force(myPid + 1, empty: false))
+        XCTAssertFalse(force(myPid + 1, workspace: "b"))
+    }
 }
