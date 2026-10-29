@@ -87,6 +87,7 @@ extension MainActor {
 public enum RefreshSessionEvent: Sendable, CustomStringConvertible {
     case configAutoReload
     case deferredNativeFocus
+    case axCooldownLayoutRetry
     case globalObserver(String)
     case globalObserverLeftMouseUp
     case menuBarButton
@@ -110,6 +111,7 @@ public enum RefreshSessionEvent: Sendable, CustomStringConvertible {
             case .ax(let str): "ax(\(str))"
             case .configAutoReload: "configAutoReload"
             case .deferredNativeFocus: "deferredNativeFocus"
+            case .axCooldownLayoutRetry: "axCooldownLayoutRetry"
             case .globalObserver(let str): "globalObserver(\(str))"
             case .globalObserverLeftMouseUp: "globalObserverLeftMouseUp"
             case .hotkeyBinding: "hotkeyBinding"

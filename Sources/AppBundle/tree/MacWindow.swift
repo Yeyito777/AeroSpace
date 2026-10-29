@@ -99,19 +99,32 @@ final class MacWindow: Window {
         let parent = unbindFromParent().parent
         let deadWindowWorkspace = parent.nodeWorkspace
         let focus = focus
+        FocusTrace.log("collected window \(windowId) of \(app.name ?? "?") pid \(app.pid) on ws \(deadWindowWorkspace?.name ?? "-"), focus \(focus.traceDescription)")
         if let deadWindowWorkspace, deadWindowWorkspace == focus.workspace ||
-            deadWindowWorkspace == prevFocusedWorkspace && prevFocusedWorkspaceDate.distance(to: .now) < 1
+            wasLeftByFollowingNativeFocusRecently(deadWindowWorkspace)
         {
             protectFocusAfterWindowClose(workspaceName: deadWindowWorkspace.name)
             switch parent.cases {
                 case .tilingContainer, .floatingWindowsContainer, .macosHiddenAppsWindowsContainer, .macosFullscreenWindowsContainer:
                     let deadWindowFocus = deadWindowWorkspace.toLiveFocus()
                     _ = setFocus(to: deadWindowFocus)
-                    // Guard against "Apple Reminders popup" bug: https://github.com/nikitabobko/AeroSpace/issues/201
-                    if focus.windowOrNil?.app.pid != app.pid {
-                        // Force focus to fix macOS annoyance with focused apps without windows.
-                        //   https://github.com/nikitabobko/AeroSpace/issues/65
-                        deadWindowFocus.windowOrNil?.nativeFocus()
+                    if let window = deadWindowFocus.windowOrNil {
+                        // Guard against "Apple Reminders popup" bug: https://github.com/nikitabobko/AeroSpace/issues/201
+                        if window.app.pid != app.pid {
+                            // Force focus to fix macOS annoyance with focused apps without windows.
+                            //   https://github.com/nikitabobko/AeroSpace/issues/65
+                            window.nativeFocus()
+                        }
+                    } else if shouldHoldNativeFocusForEmptyWorkspace(
+                        frontmostAppPid: NSWorkspace.shared.frontmostApplication?.processIdentifier,
+                        isFrontmostAppRegular: NSWorkspace.shared.frontmostApplication?.activationPolicy == .regular,
+                        deadWindowAppPid: app.pid,
+                    ) {
+                        FocusTrace.log("  ws \(deadWindowWorkspace.name) is empty: holding native focus (frontmost \(frontmostAppTraceDescription))")
+                        // The workspace is empty now. Otherwise macOS activates an app of an invisible workspace
+                        // once the dead window's app quits (or leaves that app focused without windows), and
+                        // AeroSpace would take that for user intent
+                        syncFocusToMacOs(deadWindowFocus)
                     }
                 case .macosPopupWindowsContainer, // Don't switch back on popup destruction
                      .workspace, // Workspace is invalid parent for windows
@@ -140,7 +153,10 @@ final class MacWindow: Window {
         guard let nodeMonitor else { return }
         // Don't accidentally override prevUnhiddenEmulationPosition in case of subsequent `hideInCorner` calls
         if !isHiddenInCorner {
-            guard let windowRect = try await getAxRect(.cancellable) else { return }
+            guard let windowRect = try await getAxRect(.cancellable) else {
+                if shouldSkipAxRequests(for: macApp.pid) { retryLayoutAfterAxCooldown(pid: macApp.pid) }
+                return
+            }
             // Check for isHiddenInCorner for the second time because of the suspension point above
             if !isHiddenInCorner {
                 let topLeftCorner = windowRect.topLeftCorner
@@ -348,4 +364,11 @@ extension WindowDetectedCallback {
                 return await command.run(.defaultEnv.withWindowId(window.windowId), .emptyStdin).exitCode.rawValue == 0
         }
     }
+}
+
+/// A popup of a utility app (Raycast, Spotlight, ...) keeps the focus when a window under it closes. Such apps
+/// don't own workspace windows, so macOS won't take the user to another workspace on their behalf
+func shouldHoldNativeFocusForEmptyWorkspace(frontmostAppPid: pid_t?, isFrontmostAppRegular: Bool, deadWindowAppPid: pid_t) -> Bool {
+    guard let frontmostAppPid else { return true }
+    return frontmostAppPid == deadWindowAppPid || isFrontmostAppRegular
 }

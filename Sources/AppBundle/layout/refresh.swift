@@ -19,6 +19,7 @@ func requestNativeFocusSync() {
 
 @MainActor
 func syncFocusToMacOs(_ target: LiveFocus) {
+    FocusTrace.log("sync native focus to \(target.traceDescription) (frontmost \(frontmostAppTraceDescription))")
     if let window = target.windowOrNil {
         window.nativeFocus()
     } else {
@@ -66,6 +67,7 @@ func runHeavyCompleteRefreshSession(
     let state = signposter.beginInterval(#function, "event: \(event) axTaskLocalAppThreadToken: \(axTaskLocalAppThreadToken?.idForDebug)")
     defer { signposter.endInterval(#function, state) }
     if !TrayMenuModel.shared.isEnabled { return }
+    FocusTrace.log("complete refresh: \(event), frontmost \(frontmostAppTraceDescription)")
     let res = await Result {
         try await $refreshSessionEvent.withValue(event) {
             let nativeFocused = try await getNativeFocusedWindow(.cancellable)
@@ -102,6 +104,7 @@ func runLightSession<T>(
     defer { signposter.endInterval(#function, state) }
     activeRefreshTask?.cancel() // Give priority to runSession
     activeRefreshTask = nil
+    FocusTrace.log("light session: \(event), frontmost \(frontmostAppTraceDescription)")
     let syncRequest = NativeFocusSyncRequest()
     return try await $nativeFocusSyncRequest.withValue(syncRequest) {
         try await $refreshSessionEvent.withValue(event) {
@@ -203,6 +206,42 @@ func refreshObs(_: AXObserver, _: AXUIElement, notif: CFString, _: UnsafeMutable
     Task.startUnstructured { @MainActor in
         if !TrayMenuModel.shared.isEnabled { return }
         scheduleCancellableCompleteRefreshSession(.ax(notif))
+    }
+}
+
+/// Bounds the layout retries for an app that stays unresponsive. Retries resume once they have been quiet for a while
+struct AxCooldownLayoutRetryBudget {
+    static let maxConsecutiveRetries = 5
+    static let resetAfter: Duration = .seconds(5)
+
+    private var retries = 0
+    private var lastRetry: ContinuousClock.Instant? = nil
+
+    mutating func takeRetry(now: ContinuousClock.Instant) -> Bool {
+        if let lastRetry, now - lastRetry > Self.resetAfter { retries = 0 }
+        if retries >= Self.maxConsecutiveRetries { return false }
+        retries += 1
+        lastRetry = now
+        return true
+    }
+}
+
+@MainActor private var axCooldownLayoutRetryBudget = AxCooldownLayoutRetryBudget()
+@MainActor private var axCooldownLayoutRetryTask: Task<(), Never>? = nil
+
+/// AX requests to an app in its circuit breaker cooldown are dropped (see AxAppCircuitBreakerState). A dropped frame
+/// change leaves the window where it was, e.g. on screen on top of another workspace, and nothing else might lay the
+/// windows out again soon. From any thread
+func retryLayoutAfterAxCooldown(pid: pid_t) {
+    Task.startUnstructured { @MainActor in
+        if axCooldownLayoutRetryTask != nil { return } // The scheduled refresh lays out every window
+        guard axCooldownLayoutRetryBudget.takeRetry(now: .now) else { return }
+        let delay = (axCooldownRemaining(for: pid) ?? .zero) + .milliseconds(10)
+        axCooldownLayoutRetryTask = Task.startUnstructured { @MainActor in
+            try? await Task.sleep(for: delay)
+            axCooldownLayoutRetryTask = nil
+            scheduleCancellableCompleteRefreshSession(.axCooldownLayoutRetry)
+        }
     }
 }
 

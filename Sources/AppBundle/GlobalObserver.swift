@@ -9,9 +9,12 @@ enum GlobalObserver {
             return
         }
         let notifName = notification.name.rawValue
-        let activatedAppPid = (notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?.processIdentifier
+        let notifApp = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+        let activatedAppPid = notifApp?.processIdentifier
+        let notifAppName = notifApp?.localizedName
         Task.startUnstructured { @MainActor in
             if !TrayMenuModel.shared.isEnabled { return }
+            FocusTrace.log("notification \(notifName.replacingOccurrences(of: "NSWorkspace", with: "")) \(notifAppName ?? "-") pid \(activatedAppPid ?? 0)")
             if notifName == NSWorkspace.didActivateApplicationNotification.rawValue {
                 if let activatedAppPid {
                     noteNativeAppActivation(appPid: activatedAppPid)
@@ -64,8 +67,9 @@ enum GlobalObserver {
             Task.startUnstructured { @MainActor in
                 // A click can intentionally activate another app, including one
                 // on a different workspace.  It supersedes keyboard/CLI workspace
-                // protection and should be reconciled normally.
+                // and window close protection and should be reconciled normally.
                 cancelFocusProtectionAfterWorkspaceSwitch()
+                cancelFocusProtectionAfterWindowClose()
                 guard let token: RunSessionGuard = .isServerEnabled else { return }
                 try await resetManipulatedWithMouseIfPossible()
                 let mouseLocation = mouseLocation

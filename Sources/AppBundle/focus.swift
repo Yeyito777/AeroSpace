@@ -63,6 +63,9 @@ private struct FrozenFocus: AeroAny, Equatable, Sendable {
 @MainActor func setFocus(to newFocus: LiveFocus) -> Bool {
     if _focus == newFocus.frozen { return true }
     let oldFocus = focus
+    if oldFocus.workspace != newFocus.workspace {
+        FocusTrace.log("focus: ws \(oldFocus.workspace.name) -> \(newFocus.traceDescription)")
+    }
     // Normalize mruWindow when focus away from a workspace
     if oldFocus.workspace != newFocus.workspace {
         oldFocus.windowOrNil?.markAsMostRecentChild()
@@ -104,12 +107,7 @@ extension Workspace {
 @MainActor private var _lastKnownFocus: FrozenFocus = _focus
 
 // Used by workspace-back-and-forth
-@MainActor var _prevFocusedWorkspaceName: String? = nil {
-    didSet {
-        prevFocusedWorkspaceDate = .now
-    }
-}
-@MainActor var prevFocusedWorkspaceDate: Date = .distantPast
+@MainActor var _prevFocusedWorkspaceName: String? = nil
 @MainActor var prevFocusedWorkspace: Workspace? { _prevFocusedWorkspaceName.map { Workspace.get(byName: $0) } }
 
 // Used by focus-back-and-forth
