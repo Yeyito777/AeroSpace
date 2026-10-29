@@ -14,6 +14,7 @@ final class ServerConnection {
     static func connect(path: String) -> Result<ServerConnection, ConnectionError> {
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         if fd < 0 { return .failure(.posix(errno)) }
+        _ = fcntl(fd, F_SETFD, FD_CLOEXEC) // `aerospace spawn` execs the command
         let connection = ServerConnection(fd: fd)
         var noSigPipe: Int32 = 1
         if unsafe setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe, socklen_t(MemoryLayout<Int32>.size)) != 0 {

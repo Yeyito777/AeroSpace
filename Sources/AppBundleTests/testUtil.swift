@@ -38,6 +38,7 @@ func setUpWorkspacesForTests() {
 
     TestApp.shared.focusedWindow = nil
     TestApp.shared.windows = []
+    forgetSpawnedProcessesForTests()
 }
 
 extension ParsedCmd {

@@ -36,6 +36,7 @@ let subcommandDescriptions = [
     ["  resize", "Resize the focused window"],
     ["  restart", "Restart AeroSpace.app keeping all windows where they are"],
     ["  run-callback", "Run AeroSpace config callbacks on demand"],
+    ["  spawn", "Run a command whose windows open on the given workspace, without switching to it"],
     ["  split", "Split focused window"],
     ["  subscribe", "Subscribe to AeroSpace events and receive notifications via socket"],
     ["  summon-workspace", "Move the requested workspace to the focused monitor."],

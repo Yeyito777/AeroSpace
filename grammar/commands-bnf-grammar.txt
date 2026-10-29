@@ -80,6 +80,8 @@ aerospace -h;
     | run-callback [--for-every-window|--window-id <window_id>]... on-window-detected [--for-every-window|--window-id <window_id>]...
     | run-callback (on-focus-changed|on-focused-monitor-changed)
 
+    | spawn --workspace <workspace> (--pid <pid> | -- <command>)
+
     | split [--window-id <window_id>] (horizontal|vertical|opposite) [--window-id <window_id>]
 
     | swap [--swap-focus|--wrap-around|--window-id <window_id>]... (left|down|up|right|dfs-next|dfs-prev) [--swap-focus|--wrap-around|--window-id <window_id>]...
@@ -150,6 +152,7 @@ aerospace -h;
     ;
 <output_format> ::= {{{ true }}};
 <app_bundle> ::= {{{ true }}};
+<command> ::= {{{ true }}};
 
 <app_bundle_id> ::= {{{ aerospace list-apps --format '%{app-bundle-id}%{tab}%{app-name}' }}};
 <pid> ::= {{{ aerospace list-apps --format '%{app-pid}%{tab}%{app-name}' }}};

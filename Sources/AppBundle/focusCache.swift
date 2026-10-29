@@ -256,6 +256,12 @@ private func reassertIntendedNativeFocus() {
         FocusTrace.log("  suppressed: still the focus that was declined")
         reassertIntendedNativeFocus()
         return
+    } else if let spawnWorkspaceName = spawnWorkspaceName(pid: appPid) {
+        // The app activates itself (e.g. on launch), the user didn't ask to go there
+        FocusTrace.log("  suppressed: pid \(appPid) was spawned on ws \(spawnWorkspaceName)")
+        declinedNativeFocus = decline
+        reassertIntendedNativeFocus()
+        return
     } else if let vanished = focus.windowOrNil as? MacWindow,
               isNativeFocusFallbackForVanishedWindow(
                   focusedWindowId: vanished.windowId,

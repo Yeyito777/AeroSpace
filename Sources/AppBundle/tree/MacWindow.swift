@@ -31,6 +31,7 @@ final class MacWindow: Window {
             windowId,
             macApp,
             placement.map { Workspace.get(byName: $0.workspace) }
+                ?? spawnWorkspaceName(pid: macApp.pid).map { Workspace.get(byName: $0) }
                 ?? (isStartup
                     ? (rect?.center.monitorApproximation ?? mainMonitor).activeWorkspace
                     : focus.workspace),

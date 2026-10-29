@@ -252,6 +252,13 @@ include::aerospace-run-callback.adoc[tags=synopsis]
 include::aerospace-run-callback.adoc[tags=purpose]
 include::aerospace-run-callback.adoc[tags=body]
 
+== spawn
+----
+include::aerospace-spawn.adoc[tags=synopsis]
+----
+include::aerospace-spawn.adoc[tags=purpose]
+include::aerospace-spawn.adoc[tags=body]
+
 == split
 ----
 include::aerospace-split.adoc[tags=synopsis]
