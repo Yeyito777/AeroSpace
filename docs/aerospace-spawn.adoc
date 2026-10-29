@@ -1,0 +1,54 @@
+= aerospace-spawn(1)
+include::util/man-attributes.adoc[]
+:manname: aerospace-spawn
+// tag::purpose[]
+:manpurpose: Run a command whose windows open on the given workspace, without switching to it
+// end::purpose[]
+
+// =========================================================== Synopsis
+== Synopsis
+[verse]
+// tag::synopsis[]
+aerospace spawn [-h|--help] --workspace <workspace> -- <command> [<args>...]
+aerospace spawn [-h|--help] --workspace <workspace> --pid <pid>
+
+// end::synopsis[]
+
+// =========================================================== Description
+== Description
+
+// tag::body[]
+{manpurpose}
+
+The windows of `<command>`, and of the processes that it starts, are placed straight into `<workspace>` when they
+appear. They never show up in the focused workspace and never change its layout. `<workspace>` is created if it
+doesn't exist, and like any other empty invisible workspace it disappears once its windows are gone.
+
+The process can't take the focus to `<workspace>`: AeroSpace declines it when the app activates itself (most apps
+do on launch) and gives the focus back. Switch to `<workspace>` to use its windows.
+
+The CLI client registers its own process with the server and then replaces itself with `<command>`
+(`exec`, which keeps the pid), so `<command>` runs with the environment, working directory and terminal of the
+caller, and none of its windows can appear before AeroSpace knows where they go.
+`<command>` is looked up in `PATH`. Apps started through Launch Services (`open -a`) aren't children of
+`<command>`; run the executable inside the app bundle instead.
+
+The server can't start processes, so in AeroSpace bindings use `exec-and-forget aerospace spawn ...`.
+
+The placement lasts as long as the process.
+
+// =========================================================== Options
+include::./util/conditional-options-header.adoc[]
+
+-h, --help:: Print help
+
+--workspace <workspace>:: The workspace for the windows of the process. Mandatory
+
+--pid <pid>::
+Don't run a command. Place the future windows of the already running process `<pid>` (and of its descendants)
+into `<workspace>`
+
+// end::body[]
+
+// =========================================================== Footer
+include::util/man-footer.adoc[]

@@ -38,6 +38,7 @@ public enum CmdKind: String, CaseIterable, Equatable, Sendable {
     case resize
     case restart
     case runCallback = "run-callback"
+    case spawn
     case split
     case subscribe
     case summonWorkspace = "summon-workspace"
@@ -131,6 +132,8 @@ func initSubcommands() -> [String: any SubCommandParserProtocol] {
                 result[kind.rawValue] = SubCommandParser(RestartCmdArgs.init)
             case .runCallback:
                 result[kind.rawValue] = SubCommandParser(parseRunCallbackCmdArgs)
+            case .spawn:
+                result[kind.rawValue] = SubCommandParser(parseSpawnCmdArgs)
             case .split:
                 result[kind.rawValue] = SubCommandParser(parseSplitCmdArgs)
             case .subscribe:

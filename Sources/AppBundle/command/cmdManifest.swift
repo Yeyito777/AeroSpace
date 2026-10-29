@@ -76,6 +76,8 @@ extension CmdArgs {
                 command = RestartCommand(args: self as! RestartCmdArgs)
             case .runCallback:
                 command = RunCallbackCommand(args: self as! RunCallbackCmdArgs)
+            case .spawn:
+                command = SpawnCommand(args: self as! SpawnCmdArgs)
             case .split:
                 command = SplitCommand(args: self as! SplitCmdArgs)
             case .subscribe:

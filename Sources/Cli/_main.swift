@@ -111,6 +111,10 @@ struct Main {
             exit(EXIT_CODE_ZERO) // Should not reach here
         }
 
+        if let spawnArgs = parsedArgs as? SpawnCmdArgs, !spawnArgs.command.isEmpty {
+            runSpawn(connection, spawnArgs, windowId: windowId, workspace: workspace, failExitCode: failExitCode)
+        }
+
         let ans = run(connection, args, stdin: stdin, windowId: windowId, workspace: workspace, failExitCode: failExitCode)
 
         if !ans.stdout.isEmpty { print(ans.stdout) }
@@ -132,6 +136,19 @@ struct Main {
         }
         exit(ans.exitCode)
     }
+}
+
+/// `aerospace spawn -- <command>`: the server registers this process, then the process becomes `<command>` (exec keeps
+/// the pid), so that none of its windows can appear before the server knows where they go
+func runSpawn(_ connection: ServerConnection, _ args: SpawnCmdArgs, windowId: UInt32?, workspace: String?, failExitCode: Int32) -> Never {
+    let serverArgs = ["spawn", "--workspace", args.workspace.orDie().raw, "--pid", String(getpid())]
+    let ans = run(connection, serverArgs.slice, stdin: "", windowId: windowId, workspace: workspace, failExitCode: failExitCode)
+    if ans.exitCode != EXIT_CODE_ZERO {
+        exit(ans.exitCode, err: ans.stderr)
+    }
+    let argv = unsafe args.command.map { unsafe strdup($0) } + [nil]
+    unsafe execvp(args.command[0], argv)
+    exit(failExitCode, err: "Can't run \(args.command[0].singleQuoted): \(unsafe String(cString: strerror(errno)))")
 }
 
 /// `aerospace restart` returns once the new server accepts commands
