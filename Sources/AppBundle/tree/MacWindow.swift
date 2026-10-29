@@ -99,6 +99,7 @@ final class MacWindow: Window {
         let parent = unbindFromParent().parent
         let deadWindowWorkspace = parent.nodeWorkspace
         let focus = focus
+        FocusTrace.log("collected window \(windowId) of \(app.name ?? "?") pid \(app.pid) on ws \(deadWindowWorkspace?.name ?? "-"), focus \(focus.traceDescription)")
         if let deadWindowWorkspace, deadWindowWorkspace == focus.workspace ||
             deadWindowWorkspace == prevFocusedWorkspace && prevFocusedWorkspaceDate.distance(to: .now) < 1
         {
@@ -119,6 +120,7 @@ final class MacWindow: Window {
                         isFrontmostAppRegular: NSWorkspace.shared.frontmostApplication?.activationPolicy == .regular,
                         deadWindowAppPid: app.pid,
                     ) {
+                        FocusTrace.log("  ws \(deadWindowWorkspace.name) is empty: holding native focus (frontmost \(frontmostAppTraceDescription))")
                         // The workspace is empty now. Otherwise macOS activates an app of an invisible workspace
                         // once the dead window's app quits (or leaves that app focused without windows), and
                         // AeroSpace would take that for user intent

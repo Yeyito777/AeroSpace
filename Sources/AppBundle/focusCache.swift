@@ -195,6 +195,7 @@ private func reassertIntendedNativeFocus() {
     let currentWorkspaceName = focus.workspace.name
     let nativeWorkspaceName = nativeWorkspace.name
     let appPid = nativeFocused.app.pid
+    FocusTrace.log("native focus \(nativeFocused.traceDescription), focus \(focus.traceDescription)")
 
     if nativeWorkspaceName == currentWorkspaceName {
         raceProtection.clearAppActivation(appPid: appPid)
@@ -208,6 +209,7 @@ private func reassertIntendedNativeFocus() {
         // macOS activated another app because the focused window was closed or its app quit, and it did so
         // before AeroSpace learned that the window is gone. The replacement isn't user intent. The timed
         // protections below can't cover it: the app may take any time to quit
+        FocusTrace.log("  focused window \(vanished.windowId) is gone: macOS replacement, collecting it")
         vanished.garbageCollect(skipClosedWindowsCache: false)
         reassertIntendedNativeFocus()
         return
@@ -215,6 +217,7 @@ private func reassertIntendedNativeFocus() {
         currentWorkspaceName: currentWorkspaceName,
         nativeWorkspaceName: nativeWorkspaceName,
     ) {
+        FocusTrace.log("  suppressed: workspace switch protection")
         reassertIntendedNativeFocus()
         return
     } else if raceProtection.shouldSuppressAfterClose(
@@ -224,6 +227,7 @@ private func reassertIntendedNativeFocus() {
         // Suppression must also repair native focus. Merely ignoring macOS's
         // replacement leaves that hidden-workspace app frontmost, and a later
         // refresh can mistake the stale replacement for user intent.
+        FocusTrace.log("  suppressed: close protection")
         reassertIntendedNativeFocus()
         return
     } else if let delay = raceProtection.appActivationDelay(
@@ -231,11 +235,13 @@ private func reassertIntendedNativeFocus() {
         currentWorkspaceName: currentWorkspaceName,
         nativeWorkspaceName: nativeWorkspaceName,
     ) {
+        FocusTrace.log("  deferred: app activation grace \(delay.ms)ms")
         scheduleDeferredNativeFocus(after: delay)
         updateLastNativeFocusedWindow(nativeFocused)
         return
     }
 
+    if nativeWorkspaceName != currentWorkspaceName { FocusTrace.log("  following native focus to ws \(nativeWorkspaceName)") }
     deferredNativeFocusTask?.cancel()
     _ = nativeFocused.focusWindow()
     lastKnownNativeFocusedWindowId = nativeFocused.windowId

@@ -9,9 +9,12 @@ enum GlobalObserver {
             return
         }
         let notifName = notification.name.rawValue
-        let activatedAppPid = (notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?.processIdentifier
+        let notifApp = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+        let activatedAppPid = notifApp?.processIdentifier
+        let notifAppName = notifApp?.localizedName
         Task.startUnstructured { @MainActor in
             if !TrayMenuModel.shared.isEnabled { return }
+            FocusTrace.log("notification \(notifName.replacingOccurrences(of: "NSWorkspace", with: "")) \(notifAppName ?? "-") pid \(activatedAppPid ?? 0)")
             if notifName == NSWorkspace.didActivateApplicationNotification.rawValue {
                 if let activatedAppPid {
                     noteNativeAppActivation(appPid: activatedAppPid)

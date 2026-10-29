@@ -19,6 +19,7 @@ func requestNativeFocusSync() {
 
 @MainActor
 func syncFocusToMacOs(_ target: LiveFocus) {
+    FocusTrace.log("sync native focus to \(target.traceDescription) (frontmost \(frontmostAppTraceDescription))")
     if let window = target.windowOrNil {
         window.nativeFocus()
     } else {
@@ -66,6 +67,7 @@ func runHeavyCompleteRefreshSession(
     let state = signposter.beginInterval(#function, "event: \(event) axTaskLocalAppThreadToken: \(axTaskLocalAppThreadToken?.idForDebug)")
     defer { signposter.endInterval(#function, state) }
     if !TrayMenuModel.shared.isEnabled { return }
+    FocusTrace.log("complete refresh: \(event), frontmost \(frontmostAppTraceDescription)")
     let res = await Result {
         try await $refreshSessionEvent.withValue(event) {
             let nativeFocused = try await getNativeFocusedWindow(.cancellable)
@@ -102,6 +104,7 @@ func runLightSession<T>(
     defer { signposter.endInterval(#function, state) }
     activeRefreshTask?.cancel() // Give priority to runSession
     activeRefreshTask = nil
+    FocusTrace.log("light session: \(event), frontmost \(frontmostAppTraceDescription)")
     let syncRequest = NativeFocusSyncRequest()
     return try await $nativeFocusSyncRequest.withValue(syncRequest) {
         try await $refreshSessionEvent.withValue(event) {
