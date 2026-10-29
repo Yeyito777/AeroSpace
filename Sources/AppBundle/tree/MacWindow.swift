@@ -101,7 +101,7 @@ final class MacWindow: Window {
         let focus = focus
         FocusTrace.log("collected window \(windowId) of \(app.name ?? "?") pid \(app.pid) on ws \(deadWindowWorkspace?.name ?? "-"), focus \(focus.traceDescription)")
         if let deadWindowWorkspace, deadWindowWorkspace == focus.workspace ||
-            deadWindowWorkspace == prevFocusedWorkspace && prevFocusedWorkspaceDate.distance(to: .now) < 1
+            wasLeftByFollowingNativeFocusRecently(deadWindowWorkspace)
         {
             protectFocusAfterWindowClose(workspaceName: deadWindowWorkspace.name)
             switch parent.cases {

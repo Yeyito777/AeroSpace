@@ -145,6 +145,17 @@ struct DeclinedNativeFocus: Equatable {
     }
 }
 
+/// The workspace that AeroSpace has just left by following the native focus. See MacWindow.garbageCollect
+@MainActor private var workspaceLeftByFollowingNativeFocus: (name: String, date: Date)? = nil
+
+/// Whether AeroSpace left the workspace by following the native focus less than a second ago, probably macOS's
+/// replacement for a window of that workspace that is dying (and that AeroSpace failed to tell apart). Leaving it
+/// with a command (e.g. right after typing `exit` in the shell of its last window) isn't
+@MainActor func wasLeftByFollowingNativeFocusRecently(_ workspace: Workspace) -> Bool {
+    guard let left = workspaceLeftByFollowingNativeFocus else { return false }
+    return left.name == workspace.name && left.date.distance(to: .now) < 1
+}
+
 @MainActor private var lastKnownNativeFocusedWindowId: UInt32? = nil
 @MainActor private var declinedNativeFocus: DeclinedNativeFocus? = nil
 @MainActor private var raceProtection = NativeFocusRaceProtection()
@@ -290,7 +301,10 @@ private func reassertIntendedNativeFocus() {
         return
     }
 
-    if nativeWorkspaceName != currentWorkspaceName { FocusTrace.log("  following native focus to ws \(nativeWorkspaceName)") }
+    if nativeWorkspaceName != currentWorkspaceName {
+        FocusTrace.log("  following native focus to ws \(nativeWorkspaceName)")
+        workspaceLeftByFollowingNativeFocus = (currentWorkspaceName, .now)
+    }
     deferredNativeFocusTask?.cancel()
     _ = nativeFocused.focusWindow()
     lastKnownNativeFocusedWindowId = nativeFocused.windowId

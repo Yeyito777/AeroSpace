@@ -107,12 +107,7 @@ extension Workspace {
 @MainActor private var _lastKnownFocus: FrozenFocus = _focus
 
 // Used by workspace-back-and-forth
-@MainActor var _prevFocusedWorkspaceName: String? = nil {
-    didSet {
-        prevFocusedWorkspaceDate = .now
-    }
-}
-@MainActor var prevFocusedWorkspaceDate: Date = .distantPast
+@MainActor var _prevFocusedWorkspaceName: String? = nil
 @MainActor var prevFocusedWorkspace: Workspace? { _prevFocusedWorkspaceName.map { Workspace.get(byName: $0) } }
 
 // Used by focus-back-and-forth
