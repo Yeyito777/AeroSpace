@@ -4,9 +4,12 @@ import Common
 private let clock = ContinuousClock()
 
 struct NativeFocusRaceProtection {
-    // macOS chooses a replacement focused window asynchronously after a close.
-    // Ignore only the short cross-workspace fallout of that choice.
-    static let closeProtectionDuration: Duration = .milliseconds(250)
+    // macOS chooses a replacement focused window asynchronously after a close,
+    // or once the app quits, which can take a while after its last window
+    // closed. Ignore the cross-workspace fallout of that choice. The protection
+    // ends early once AeroSpace holds the native focus or the native focus is
+    // on the closed window's workspace: then macOS has nothing left to replace.
+    static let closeProtectionDuration: Duration = .seconds(1)
     // App activation can arrive just before the window-created notification.
     // Give the new window time to be registered on the current workspace.
     static let appActivationGraceDuration: Duration = .milliseconds(150)
@@ -42,6 +45,10 @@ struct NativeFocusRaceProtection {
             workspaceName: workspaceName,
             expiresAt: now.advanced(by: Self.closeProtectionDuration),
         )
+    }
+
+    mutating func clearWindowClose() {
+        protectedClose = nil
     }
 
     mutating func recordAppActivation(
@@ -149,6 +156,11 @@ func protectFocusAfterWindowClose(workspaceName: String) {
 }
 
 @MainActor
+func cancelFocusProtectionAfterWindowClose() {
+    raceProtection.clearWindowClose()
+}
+
+@MainActor
 func noteNativeAppActivation(appPid: Int32) {
     raceProtection.recordAppActivation(appPid: appPid)
 }
@@ -205,6 +217,9 @@ private func reassertIntendedNativeFocus() {
     ) {
         declinedNativeFocus = nil
     }
+    if nativeFocused == nil && !isUnitTest && NSWorkspace.shared.frontmostApplication?.processIdentifier == myPid {
+        raceProtection.clearWindowClose() // AeroSpace holds the native focus
+    }
     guard nativeFocused?.windowId != lastKnownNativeFocusedWindowId else {
         updateLastNativeFocusedWindow(nativeFocused)
         return
@@ -225,6 +240,7 @@ private func reassertIntendedNativeFocus() {
     let decline = DeclinedNativeFocus(windowId: nativeFocused.windowId, appPid: appPid, workspaceName: currentWorkspaceName)
     if nativeWorkspaceName == currentWorkspaceName {
         raceProtection.clearAppActivation(appPid: appPid)
+        raceProtection.clearWindowClose()
     } else if declinedNativeFocus == decline {
         FocusTrace.log("  suppressed: still the focus that was declined")
         reassertIntendedNativeFocus()

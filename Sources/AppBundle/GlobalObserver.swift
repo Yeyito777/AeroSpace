@@ -67,8 +67,9 @@ enum GlobalObserver {
             Task.startUnstructured { @MainActor in
                 // A click can intentionally activate another app, including one
                 // on a different workspace.  It supersedes keyboard/CLI workspace
-                // protection and should be reconciled normally.
+                // and window close protection and should be reconciled normally.
                 cancelFocusProtectionAfterWorkspaceSwitch()
+                cancelFocusProtectionAfterWindowClose()
                 guard let token: RunSessionGuard = .isServerEnabled else { return }
                 try await resetManipulatedWithMouseIfPossible()
                 let mouseLocation = mouseLocation

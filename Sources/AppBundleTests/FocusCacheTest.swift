@@ -176,4 +176,16 @@ final class FocusCacheTest: XCTestCase {
         // The user left the workspace
         XCTAssertFalse(declined.stillHolds(nativeFocusedWindowId: 7, frontmostAppPid: 70, currentWorkspaceName: "b"))
     }
+
+    func testCloseProtectionCanEndEarly() {
+        var protection = NativeFocusRaceProtection()
+        protection.recordWindowClose(workspaceName: "a", now: now)
+        protection.clearWindowClose()
+
+        XCTAssertFalse(protection.shouldSuppressAfterClose(
+            currentWorkspaceName: "a",
+            nativeWorkspaceName: "b",
+            now: now,
+        ))
+    }
 }
