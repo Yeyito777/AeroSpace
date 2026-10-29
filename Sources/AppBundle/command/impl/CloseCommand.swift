@@ -28,7 +28,7 @@ struct CloseCommand: Command {
                 // virtual workspace, become the native frontmost app first.
                 // Otherwise macOS activates an app from another workspace
                 // while the current workspace is empty.
-                NSApp.activate(ignoringOtherApps: true)
+                activateAeroSpaceAsFocusSink()
             }
             if app.nsApp.terminate() {
                 for workspace in Workspace.all {

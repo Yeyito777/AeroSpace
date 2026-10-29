@@ -26,7 +26,7 @@ func syncFocusToMacOs(_ target: LiveFocus) {
         // AeroSpace workspaces are virtual. Owning native focus while an empty
         // workspace is active prevents macOS from surfacing an app whose
         // windows belong to a hidden workspace.
-        NSApp.activate(ignoringOtherApps: true)
+        activateAeroSpaceAsFocusSink()
     }
 }
 
