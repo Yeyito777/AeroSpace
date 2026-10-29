@@ -174,6 +174,14 @@ func cancelFocusProtectionAfterWindowClose() {
 @MainActor
 func noteNativeAppActivation(appPid: Int32) {
     raceProtection.recordAppActivation(appPid: appPid)
+    // A spawned app activates itself on launch before AeroSpace knows any of its windows. Don't let it keep the
+    // keyboard meanwhile
+    if let spawnWorkspaceName = spawnWorkspaceName(pid: appPid),
+       !focus.workspace.allLeafWindowsRecursive.contains(where: { $0.app.pid == appPid })
+    {
+        FocusTrace.log("  declined activation: pid \(appPid) was spawned on ws \(spawnWorkspaceName)")
+        reassertIntendedNativeFocus()
+    }
 }
 
 @MainActor
