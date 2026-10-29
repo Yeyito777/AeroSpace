@@ -171,10 +171,13 @@ final class MacApp: AbstractApp {
 
     func setAxFrame(_ windowId: UInt32, _ topLeft: CGPoint?, _ size: CGSize?) {
         setFrameJobs.removeValue(forKey: windowId)?.cancel()
-        setFrameJobs[windowId] = withWindowAsync(windowId, .cancellable) { [axApp] window, job in
+        let retryLayout: @Sendable () -> () = { [pid] in retryLayoutAfterAxCooldown(pid: pid) }
+        setFrameJobs[windowId] = withWindowAsync(windowId, .cancellable, onAxCooldown: retryLayout) { [axApp, pid] window, job in
             try disableAnimations(app: axApp.threadGuarded, job) {
                 try setFrame(window, topLeft, size, job)
             }
+            // The app stopped answering while the frame was being changed
+            if shouldSkipAxRequests(for: pid) { retryLayout() }
         }
     }
 
@@ -302,7 +305,7 @@ final class MacApp: AbstractApp {
             // Register new apps
             for nsApp in NSWorkspace.shared.runningApplications {
                 try checkCancellation()
-                if nsApp.activationPolicy == .regular {
+                if isWatchedApp(nsApp) {
                     refreshTheApp(nsApp)
                 }
             }
@@ -311,7 +314,7 @@ final class MacApp: AbstractApp {
                 // "About this Mac" window, TouchID, and a lot of other utility windows
                 // We don't monitor them actively as we do for regular apps, but if a window of one of those utility
                 // apps got focused it will end up in allAppsMap
-                if app.nsApp.activationPolicy != .regular {
+                if !isWatchedApp(app.nsApp) {
                     refreshTheApp(app.nsApp)
                 }
             }
@@ -466,14 +469,33 @@ final class MacApp: AbstractApp {
         }
     }
 
-    private func withWindowAsync(_ windowId: UInt32, _ cm: CancellationMode, _ body: @Sendable @escaping (AXUIElement, RunLoopJob) throws -> ()) -> RunLoopJob {
-        if shouldSkipAxRequests(for: pid) { return .cancelled }
+    /// `onAxCooldown` is called if the job is dropped because the app is in its circuit breaker cooldown
+    private func withWindowAsync(
+        _ windowId: UInt32,
+        _ cm: CancellationMode,
+        onAxCooldown: (@Sendable () -> ())? = nil,
+        _ body: @Sendable @escaping (AXUIElement, RunLoopJob) throws -> (),
+    ) -> RunLoopJob {
+        if shouldSkipAxRequests(for: pid) {
+            onAxCooldown?()
+            return .cancelled
+        }
         return thread?.runInLoopAsync(job: RunLoopJob(cm)) { [pid, windows] job in
-            if shouldSkipAxRequests(for: pid) { return }
+            if shouldSkipAxRequests(for: pid) {
+                onAxCooldown?()
+                return
+            }
             guard let window = windows.threadGuarded[windowId] else { return }
             try? body(window.ax, job)
         } ?? .cancelled
     }
+}
+
+/// Apps whose windows are looked for in every complete refresh, not only once one of them is focused
+private func isWatchedApp(_ nsApp: NSRunningApplication) -> Bool {
+    // Steam's windows belong to its accessory helper process. A Steam window that shows up without being focused would
+    // stay on screen on top of every workspace
+    nsApp.activationPolicy == .regular || nsApp.bundleIdentifier == KnownBundleId.steam.rawValue
 }
 
 /// An AX element passed from an app thread to the main actor and back. AX elements are thread safe CF objects

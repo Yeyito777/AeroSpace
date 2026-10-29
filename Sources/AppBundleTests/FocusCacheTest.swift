@@ -131,4 +131,34 @@ final class FocusCacheTest: XCTestCase {
             now: now,
         ))
     }
+
+    func testFocusFallbackForVanishedWindow() {
+        // The focused window is gone: macOS picked the replacement, not the user
+        XCTAssertTrue(isNativeFocusFallbackForVanishedWindow(
+            focusedWindowId: 1,
+            nativeFocusedWindowId: 2,
+            windowExists: { $0 != 1 },
+        ))
+        // The focused window is still there: e.g. the user clicked a notification of another app
+        XCTAssertFalse(isNativeFocusFallbackForVanishedWindow(
+            focusedWindowId: 1,
+            nativeFocusedWindowId: 2,
+            windowExists: { _ in true },
+        ))
+        XCTAssertFalse(isNativeFocusFallbackForVanishedWindow(
+            focusedWindowId: 1,
+            nativeFocusedWindowId: 1,
+            windowExists: { _ in false },
+        ))
+    }
+
+    func testEmptyWorkspaceHoldsNativeFocusUnlessUtilityPopupHasIt() {
+        // The dead window's app is still frontmost (quitting, or left without windows)
+        XCTAssertTrue(shouldHoldNativeFocusForEmptyWorkspace(frontmostAppPid: 10, isFrontmostAppRegular: true, deadWindowAppPid: 10))
+        // macOS already activated a regular app (of another workspace)
+        XCTAssertTrue(shouldHoldNativeFocusForEmptyWorkspace(frontmostAppPid: 11, isFrontmostAppRegular: true, deadWindowAppPid: 10))
+        XCTAssertTrue(shouldHoldNativeFocusForEmptyWorkspace(frontmostAppPid: nil, isFrontmostAppRegular: false, deadWindowAppPid: 10))
+        // Raycast, Spotlight, or AeroSpace itself
+        XCTAssertFalse(shouldHoldNativeFocusForEmptyWorkspace(frontmostAppPid: 11, isFrontmostAppRegular: false, deadWindowAppPid: 10))
+    }
 }

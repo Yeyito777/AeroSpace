@@ -110,6 +110,17 @@ struct NativeFocusRaceProtection {
     }
 }
 
+/// Whether a native focus change to another workspace is macOS replacing the focused window that no longer exists.
+/// The window server forgets a window as soon as it's closed (or its app quits), while AeroSpace learns about it from
+/// notifications that can arrive after the replacement
+func isNativeFocusFallbackForVanishedWindow(
+    focusedWindowId: UInt32,
+    nativeFocusedWindowId: UInt32,
+    windowExists: (UInt32) -> Bool,
+) -> Bool {
+    focusedWindowId != nativeFocusedWindowId && !windowExists(focusedWindowId)
+}
+
 @MainActor private var lastKnownNativeFocusedWindowId: UInt32? = nil
 @MainActor private var raceProtection = NativeFocusRaceProtection()
 @MainActor private var deferredNativeFocusTask: Task<(), Never>? = nil
@@ -187,6 +198,19 @@ private func reassertIntendedNativeFocus() {
 
     if nativeWorkspaceName == currentWorkspaceName {
         raceProtection.clearAppActivation(appPid: appPid)
+    } else if let vanished = focus.windowOrNil as? MacWindow,
+              isNativeFocusFallbackForVanishedWindow(
+                  focusedWindowId: vanished.windowId,
+                  nativeFocusedWindowId: nativeFocused.windowId,
+                  windowExists: windowServerHasWindow,
+              )
+    {
+        // macOS activated another app because the focused window was closed or its app quit, and it did so
+        // before AeroSpace learned that the window is gone. The replacement isn't user intent. The timed
+        // protections below can't cover it: the app may take any time to quit
+        vanished.garbageCollect(skipClosedWindowsCache: false)
+        reassertIntendedNativeFocus()
+        return
     } else if raceProtection.shouldSuppressAfterWorkspaceSwitch(
         currentWorkspaceName: currentWorkspaceName,
         nativeWorkspaceName: nativeWorkspaceName,

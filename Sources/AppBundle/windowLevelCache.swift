@@ -26,9 +26,23 @@ func getWindowLevel(for windowId: UInt32) -> MacOsWindowLevel? {
     return result[windowId]
 }
 
+/// The window server's description of the window, or nil if the window doesn't exist. From any thread
+func getWindowServerDescription(of windowId: UInt32) -> NSDictionary? {
+    // The array must hold the CGWindowID values themselves. An array of NSNumbers matches no window
+    var value = unsafe UnsafeRawPointer(bitPattern: UInt(windowId))
+    guard let ids = unsafe CFArrayCreate(nil, &value, 1, nil) else { return nil }
+    return (CGWindowListCreateDescriptionFromArray(ids) as? [NSDictionary])?.first
+}
+
+/// Whether the window server still has the window. A window that is closed, or whose app quit, is gone at once,
+/// while AeroSpace learns about it from asynchronous notifications. Hidden and minimized windows still exist
+func windowServerHasWindow(_ windowId: UInt32) -> Bool {
+    getWindowServerDescription(of: windowId) != nil
+}
+
 /// Same as getWindowLevel, for one window, from any thread
 func getWindowLevelOffMainThread(for windowId: UInt32) -> MacOsWindowLevel? {
-    guard let info = (CGWindowListCreateDescriptionFromArray([NSNumber(value: windowId)] as CFArray) as? [NSDictionary])?.first,
+    guard let info = getWindowServerDescription(of: windowId),
           (info[kCGWindowIsOnscreen] as? Bool) == true, // getWindowLevel only knows on-screen windows
           let layer = info[kCGWindowLayer] as? NSNumber
     else { return nil }

@@ -378,6 +378,11 @@ struct AxAppCircuitBreakerState {
         unresponsiveUntil[pid] = nil
         return false
     }
+
+    func remainingCooldown(for pid: pid_t, now: ContinuousClock.Instant) -> Duration? {
+        guard let deadline = unresponsiveUntil[pid], now < deadline else { return nil }
+        return now.duration(to: deadline)
+    }
 }
 
 private final class AxAppCircuitBreaker: @unchecked Sendable {
@@ -396,12 +401,22 @@ private final class AxAppCircuitBreaker: @unchecked Sendable {
         defer { lock.unlock() }
         return state.shouldSkipRequests(for: pid, now: clock.now)
     }
+
+    func remainingCooldown(for pid: pid_t) -> Duration? {
+        lock.lock()
+        defer { lock.unlock() }
+        return state.remainingCooldown(for: pid, now: clock.now)
+    }
 }
 
 private let axAppCircuitBreaker = AxAppCircuitBreaker()
 
 func shouldSkipAxRequests(for pid: pid_t) -> Bool {
     axAppCircuitBreaker.shouldSkipRequests(for: pid)
+}
+
+func axCooldownRemaining(for pid: pid_t) -> Duration? {
+    axAppCircuitBreaker.remainingCooldown(for: pid)
 }
 
 func recordAxError(_ error: AXError, phase: AxRequestPhase = .establishedApp) {

@@ -53,4 +53,28 @@ final class AxAppCircuitBreakerTest: XCTestCase {
 
         XCTAssertTrue(state.shouldSkipRequests(for: 42, now: now))
     }
+
+    func testRemainingCooldown() {
+        var state = AxAppCircuitBreakerState()
+        let now = ContinuousClock().now
+        XCTAssertNil(state.remainingCooldown(for: 42, now: now))
+
+        state.recordTimeout(for: 42, now: now)
+
+        XCTAssertEqual(state.remainingCooldown(for: 42, now: now), AxAppCircuitBreakerState.cooldowns[0])
+        XCTAssertNil(state.remainingCooldown(for: 43, now: now))
+        XCTAssertNil(state.remainingCooldown(for: 42, now: now.advanced(by: AxAppCircuitBreakerState.cooldowns[0])))
+    }
+
+    func testLayoutRetryBudgetIsBoundedAndRecovers() {
+        var budget = AxCooldownLayoutRetryBudget()
+        let now = ContinuousClock().now
+        for i in 0 ..< AxCooldownLayoutRetryBudget.maxConsecutiveRetries {
+            XCTAssertTrue(budget.takeRetry(now: now.advanced(by: .seconds(i))))
+        }
+        let last = now.advanced(by: .seconds(AxCooldownLayoutRetryBudget.maxConsecutiveRetries - 1))
+        XCTAssertFalse(budget.takeRetry(now: last.advanced(by: .seconds(1))))
+
+        XCTAssertTrue(budget.takeRetry(now: last.advanced(by: AxCooldownLayoutRetryBudget.resetAfter + .milliseconds(1))))
+    }
 }
