@@ -1,6 +1,6 @@
 {
   "aerospace.toml": {
-    "sha256": "359ca6a99df6488e76d8b03bf7a9a711e89dec7db683e9308a228b7955b15861",
+    "sha256": "65ba143a26a98f438635acf79603f75156d0256843f533ae6dfbf5fa3a92e28b",
     "source": "~/.aerospace.toml"
   },
   "aerospace/close-window-stay-workspace.sh": {
@@ -18,6 +18,10 @@
   "aerospace/launch-exocortex.sh": {
     "sha256": "05a22f92c6d53f9ea432c94412633ec4f62f701ad07ba241c295c9a860e6b092",
     "source": "~/.config/aerospace/launch-exocortex.sh"
+  },
+  "aerospace/launch-notes.sh": {
+    "sha256": "a1756d9beb6adb9761e55b46d57aa9820deaecd96c6f88f166e7548ecee6522e",
+    "source": "~/.config/aerospace/launch-notes.sh"
   },
   "aerospace/move-window-fully-left.sh": {
     "sha256": "da65f139163046342f17c8d37b44c411df415764bd728c60f09c5375705696bd",

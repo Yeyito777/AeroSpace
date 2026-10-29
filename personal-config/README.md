@@ -1,7 +1,7 @@
 # Personal AeroSpace setup
 
 Snapshot of the configuration used with the
-`personal/focus-and-hang-fixes` branch of this fork. The application's fork
+`main` branch of this fork. The application's fork
 code is in the normal repository source directories; these are the personal
 settings and companion helpers, not a replacement for the upstream defaults.
 
@@ -32,6 +32,7 @@ Option mapping, `alt` means the **physical Command key**.
 | Alt+Shift+Space | New st in the focused st child's local working directory, reactivating its Python venv when available; otherwise normal launch |
 | Alt+Shift+L | Exocortex in a new st window |
 | Alt+Shift+; | Exocortex over the `whale` SSH alias |
+| Alt+Shift+M | `~/Notes/main.md` in nvim in a new st window |
 | Alt+O / Alt+D / Alt+Shift+D | Insert/delete numeric workspaces |
 | Alt+Enter | Move the focused window to the far-left edge |
 | Ctrl+Minus | Type an em dash |

@@ -20,6 +20,7 @@ def main():
         "create-numeric-workspace.sh",
         "delete-numeric-workspace.sh",
         "launch-exocortex.sh",
+        "launch-notes.sh",
         "move-window-fully-left.sh",
         "numeric-workspace-step.sh",
         "open-spotlight.jxa",
