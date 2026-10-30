@@ -111,9 +111,6 @@ on-mode-changed = []
     # Inherit the focused st shell's directory; otherwise start in $HOME.
     alt-shift-space = 'exec-and-forget /Users/yeyito/Applications/st.app/Contents/Resources/bin/st-aerospace-launch --inherit-cwd'
 
-    # See: https://nikitabobko.github.io/AeroSpace/commands#layout
-    alt-comma = 'layout accordion horizontal vertical'
-
     # See: https://nikitabobko.github.io/AeroSpace/commands#focus
     alt-h = 'focus up'
     alt-j = 'focus right'
