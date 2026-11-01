@@ -89,14 +89,18 @@ final class MacWindow: Window {
         macApp.setNativeMinimized(windowId, value)
     }
 
-    // skipClosedWindowsCache is an optimization when it's definitely not necessary to cache closed window.
-    //                        If you are unsure, it's better to pass `false`
+    // skipClosedWindowsCache: the window was closed on purpose, the closed windows cache must neither be updated nor
+    //                        bring the window back. If you are unsure, it's better to pass `false`
     @MainActor
     func garbageCollect(skipClosedWindowsCache: Bool) {
         if MacWindow.allWindowsMap.removeValue(forKey: windowId) == nil {
             return
         }
-        if !skipClosedWindowsCache { cacheClosedWindowIfNeeded() }
+        if skipClosedWindowsCache {
+            forgetClosedWindowInClosedWindowsCache(windowId)
+        } else {
+            cacheClosedWindowIfNeeded()
+        }
         let parent = unbindFromParent().parent
         let deadWindowWorkspace = parent.nodeWorkspace
         let focus = focus

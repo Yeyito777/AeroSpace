@@ -17,6 +17,15 @@ import Common
     closedWindowsCache = .capture()
 }
 
+/// The window was closed on purpose (`close` command), it isn't going to come back after a lock screen. Apps may take a
+/// moment to close the window, and a refresh meanwhile sees it as a new window. That must not restore the cached world,
+/// which may be minutes old: it put back the workspace that was visible back then
+@MainActor func forgetClosedWindowInClosedWindowsCache(_ windowId: UInt32) {
+    if closedWindowsCache.windowIds.contains(windowId) {
+        closedWindowsCache = closedWindowsCache.filterWindows { $0.id != windowId }
+    }
+}
+
 @MainActor func restoreClosedWindowsCacheIfNeeded(newlyDetectedWindow: Window) async throws -> Bool {
     if !closedWindowsCache.windowIds.contains(newlyDetectedWindow.windowId) {
         return false

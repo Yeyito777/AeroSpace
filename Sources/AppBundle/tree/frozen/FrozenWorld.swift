@@ -80,6 +80,11 @@ struct FrozenWorld: Sendable, Codable, Equatable {
             }
         }
         restoreMonitors()
+        if !restoreFocus {
+            // The world's visible workspaces may predate the current focus (the closed windows cache is captured when a
+            // window dies, and kept). The screen must not show a workspace other than the one the keyboard focus is on
+            ensureFocusedWorkspaceIsVisible()
+        }
 
         if restoreFocus, let focusedWorkspace {
             let focusedWindow = focusedWindowId.flatMap(window(byId:)).flatMap(lookup)

@@ -137,6 +137,18 @@ func gcMonitors() {
     if screenPointToVisibleWorkspace.count != monitors.count {
         rearrangeWorkspacesOnMonitors()
     }
+    ensureFocusedWorkspaceIsVisible()
+}
+
+/// The focused workspace is the visible workspace of its monitor. If anything breaks that, the screen shows one
+/// workspace while the keyboard focus stays on a hidden one, and the next click on the desktop "switches" to the shown one
+@MainActor
+func ensureFocusedWorkspaceIsVisible() {
+    let focused = focus.workspace
+    if focused.isVisible { return }
+    let monitor = focused.workspaceMonitor
+    FocusTrace.log("focused ws \(focused.name) wasn't visible (its monitor showed ws \(monitor.activeWorkspace.name)): showing it")
+    _ = monitor.setActiveWorkspace(focused)
 }
 
 extension CGPoint {

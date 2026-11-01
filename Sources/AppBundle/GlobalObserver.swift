@@ -75,8 +75,11 @@ enum GlobalObserver {
                 let mouseLocation = mouseLocation
                 let clickedMonitor = mouseLocation.monitorApproximation
                 switch true {
-                    // Detect clicks on desktop of different monitors
-                    case clickedMonitor.visibleRect.contains(mouseLocation) && clickedMonitor.activeWorkspace != focus.workspace:
+                    // Detect clicks on desktop of different monitors. Only of different monitors: if the focused
+                    // workspace isn't the one its monitor shows, that's AeroSpace's inconsistency, not user intent
+                    case clickedMonitor.visibleRect.contains(mouseLocation) &&
+                    clickedMonitor.rect.topLeftCorner != focus.workspace.workspaceMonitor.rect.topLeftCorner &&
+                    clickedMonitor.activeWorkspace != focus.workspace:
                         _ = try await runLightSession(.globalObserverLeftMouseUp, token) {
                             clickedMonitor.activeWorkspace.focusWorkspace()
                         }
