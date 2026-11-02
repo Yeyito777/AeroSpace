@@ -13,6 +13,7 @@ enum FocusTrace {
     private static var lastCheck: ContinuousClock.Instant? = nil
 
     static func log(_ message: @autoclosure () -> String) {
+        if isUnitTest { return } // Tests share the user's home: their fake workspaces would end up in the real log
         let now = ContinuousClock.now
         if lastCheck.map({ now - $0 > .seconds(1) }) ?? true {
             lastCheck = now
