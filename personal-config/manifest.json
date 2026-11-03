@@ -15,6 +15,10 @@
     "sha256": "096d462318f329116a00c145e5381f433d8b47a85382652eaf8f9259da3be913",
     "source": "~/.config/aerospace/delete-numeric-workspace.sh"
   },
+  "aerospace/launch-cal.sh": {
+    "sha256": "bdde1a00e3798740b96fd4896a22d12ea4bd69ff1692e373b41c68ca5a6435a8",
+    "source": "~/.config/aerospace/launch-cal.sh"
+  },
   "aerospace/launch-exocortex.sh": {
     "sha256": "05a22f92c6d53f9ea432c94412633ec4f62f701ad07ba241c295c9a860e6b092",
     "source": "~/.config/aerospace/launch-exocortex.sh"

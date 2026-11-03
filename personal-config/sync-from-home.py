@@ -19,6 +19,7 @@ def main():
         "close-window-stay-workspace.sh",
         "create-numeric-workspace.sh",
         "delete-numeric-workspace.sh",
+        "launch-cal.sh",
         "launch-exocortex.sh",
         "launch-notes.sh",
         "move-window-fully-left.sh",
