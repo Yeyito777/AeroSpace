@@ -1,6 +1,6 @@
 {
   "aerospace.toml": {
-    "sha256": "4b059c6cb4b3da28d760f69ee34b1292e18ddccb99d103258915553fabc4b82c",
+    "sha256": "44b95966db31715e7d42f242f94688e4747a2b1f2234e2218a7cb89f4b33a599",
     "source": "~/.aerospace.toml"
   },
   "aerospace/close-window-stay-workspace.sh": {

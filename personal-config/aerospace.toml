@@ -191,7 +191,8 @@ on-mode-changed = []
     alt-shift-i = 'move-node-to-workspace I'
     # Physical Cmd+Shift+M: open ~/Notes in nvim in a new st window here.
     alt-shift-m = 'exec-and-forget /Users/yeyito/.config/aerospace/launch-notes.sh'
-    alt-shift-n = 'move-node-to-workspace N'
+    # Physical Cmd+Shift+N: open Whale Cal over the whale SSH alias in a new st window here.
+    alt-shift-n = 'exec-and-forget /Users/yeyito/.config/aerospace/launch-cal.sh --ssh whale'
     alt-shift-o = 'move-node-to-workspace O'
     alt-shift-p = 'move-node-to-workspace P'
     alt-shift-q = 'move-node-to-workspace Q'
@@ -209,6 +210,8 @@ on-mode-changed = []
     alt-tab = 'workspace-back-and-forth'
     # See: https://nikitabobko.github.io/AeroSpace/commands#move-workspace-to-monitor
     alt-shift-tab = 'move-workspace-to-monitor --wrap-around next'
+    # Physical Cmd+`: focus the other screen (its visible workspace).
+    alt-backtick = 'focus-monitor --wrap-around next'
 
     # Physical Cmd+Shift+;: open Exocortex over the whale SSH alias.
     alt-shift-semicolon = 'exec-and-forget /Users/yeyito/.config/aerospace/launch-exocortex.sh --ssh whale'
