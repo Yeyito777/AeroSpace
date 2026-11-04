@@ -36,7 +36,8 @@ Option mapping, `alt` means the **physical Command key**.
 | Alt+Shift+N | Whale Cal over the `whale` SSH alias in a new st window |
 | Alt+O / Alt+D / Alt+Shift+D | Insert/delete numeric workspaces |
 | Alt+Enter | Move the focused window to the far-left edge |
-| Alt+Backtick | Focus the other monitor |
+| Alt+Comma | Focus the other monitor |
+| Alt+Shift+Comma | Move the focused window to the other monitor (focus follows) |
 | Ctrl+Minus | Type an em dash |
 
 ## Restore
