@@ -45,6 +45,10 @@ extension TilingContainer {
         }
     }
 
+    func forceOrientation(_ orientation: Orientation) {
+        _orientation = orientation
+    }
+
     func normalizeOppositeOrientationForNestedContainers() {
         if orientation == (parent as? TilingContainer)?.orientation {
             _orientation = orientation.opposite
