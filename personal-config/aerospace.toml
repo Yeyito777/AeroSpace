@@ -17,6 +17,8 @@ enable-normalization-flatten-containers = true
 enable-normalization-opposite-orientation-for-nested-containers = true
 # Fork: never tile vertically. Every workspace stays one horizontal row of windows.
 horizontal-tiling-only = true
+# Fork: floating windows always stay in front of tiling windows, even when a tiling window is focused.
+floating-windows-on-top = true
 
 # See: https://nikitabobko.github.io/AeroSpace/guide#layouts
 # The 'accordion-padding' specifies the size of accordion padding
