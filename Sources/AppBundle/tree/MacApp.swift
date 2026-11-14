@@ -169,6 +169,20 @@ final class MacApp: AbstractApp {
         }
     }
 
+    /// Fork: `floating-windows-on-top`. Gives the window the keyboard focus without ordering it in front of other
+    /// windows. Returns false if macOS refused
+    @MainActor func nativeFocusWithoutRaise(_ windowId: UInt32) -> Bool {
+        if serverArgs.isReadOnly { return true }
+        MacApp.focusJob?.cancel()
+        return setFrontProcess(pid: pid, windowId: windowId, mode: cpsUserGenerated | cpsNoWindows) &&
+            makeKeyWindowWithoutRaise(pid: pid, windowId: windowId)
+    }
+
+    /// Orders the window in front of other apps' windows only while the app is active
+    func raiseAxWindow(_ windowId: UInt32) async throws {
+        _ = try await withWindow(windowId, .cancellable) { window, _ in window.perform(kAXRaiseAction) }
+    }
+
     func setAxFrame(_ windowId: UInt32, _ topLeft: CGPoint?, _ size: CGSize?) {
         setFrameJobs.removeValue(forKey: windowId)?.cancel()
         let retryLayout: @Sendable () -> () = { [pid] in retryLayoutAfterAxCooldown(pid: pid) }

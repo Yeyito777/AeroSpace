@@ -26,9 +26,19 @@ private let getProcessForPid: GetProcessForPid? = {
     return unsafe unsafeBitCast(symbol, to: GetProcessForPid.self)
 }()
 
+private typealias PostEventRecordTo = @convention(c) (UnsafeMutablePointer<ProcessSerialNumber>, UnsafeMutablePointer<UInt8>) -> Int32
+
+private let postEventRecordTo: PostEventRecordTo? = {
+    guard let skyLight = unsafe dlopen("/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight", RTLD_LAZY),
+          let symbol = unsafe dlsym(skyLight, "SLPSPostEventRecordTo")
+    else { return nil }
+    return unsafe unsafeBitCast(symbol, to: PostEventRecordTo.self)
+}()
+
 /// CPS (Core Process Services) modes of _SLPSSetFrontProcessWithOptions
-private let cpsUserGenerated: UInt32 = 0x200
-private let cpsNoWindows: UInt32 = 0x400
+let cpsUserGenerated: UInt32 = 0x200
+/// Activates the process without bringing any of its windows forward
+let cpsNoWindows: UInt32 = 0x400
 
 /// How long macOS gets to honor the cooperative activation before AeroSpace forces it. Activation takes ~10 ms
 private let cooperativeActivationGrace: Duration = .milliseconds(50)
@@ -74,12 +84,32 @@ func shouldForceFocusSink(
     return isFocusedWorkspaceEmpty && focusedWorkspaceName == requestedWorkspaceName
 }
 
-/// Returns false if the call is unavailable or failed
+/// Returns false if the call is unavailable or failed. `windowId` 0 means the process's own choice of window
 @MainActor
-private func setFrontProcess(pid: pid_t, mode: UInt32) -> Bool {
+func setFrontProcess(pid: pid_t, windowId: UInt32 = 0, mode: UInt32) -> Bool {
     if serverArgs.isReadOnly || isUnitTest { return false }
     guard let setFrontProcessWithOptions = unsafe setFrontProcessWithOptions, let getProcessForPid = unsafe getProcessForPid else { return false }
     var psn = ProcessSerialNumber()
     guard unsafe getProcessForPid(pid, &psn) == noErr else { return false }
-    return unsafe setFrontProcessWithOptions(&psn, 0, mode) == 0
+    return unsafe setFrontProcessWithOptions(&psn, windowId, mode) == 0
+}
+
+/// Makes the window the key window of its (active) app without ordering it front. These are the window server event
+/// records that a click on the window produces; yabai uses them to focus windows without raising them
+@MainActor
+func makeKeyWindowWithoutRaise(pid: pid_t, windowId: UInt32) -> Bool {
+    if serverArgs.isReadOnly || isUnitTest { return false }
+    guard let postEventRecordTo = unsafe postEventRecordTo, let getProcessForPid = unsafe getProcessForPid else { return false }
+    var psn = ProcessSerialNumber()
+    guard unsafe getProcessForPid(pid, &psn) == noErr else { return false }
+    var bytes = [UInt8](repeating: 0, count: 0xf8)
+    bytes[0x04] = 0xf8
+    bytes[0x3a] = 0x10
+    for i in 0 ..< 4 { bytes[0x3c + i] = UInt8(truncatingIfNeeded: windowId >> (8 * UInt32(i))) }
+    for i in 0x20 ..< 0x30 { bytes[i] = 0xff }
+    bytes[0x08] = 0x01
+    let down = unsafe postEventRecordTo(&psn, &bytes)
+    bytes[0x08] = 0x02
+    let up = unsafe postEventRecordTo(&psn, &bytes)
+    return down == 0 && up == 0
 }

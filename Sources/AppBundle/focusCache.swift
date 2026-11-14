@@ -229,6 +229,9 @@ private func reassertIntendedNativeFocus() {
     if nativeFocused?.parent is MacosPopupWindowsContainer {
         return
     }
+    if let nativeFocused, isNativeFocusFromRaisingFloatingWindows(nativeFocused) {
+        return
+    }
     if let declined = declinedNativeFocus, !declined.stillHolds(
         nativeFocusedWindowId: nativeFocused?.windowId,
         frontmostAppPid: isUnitTest ? nil : NSWorkspace.shared.frontmostApplication?.processIdentifier,

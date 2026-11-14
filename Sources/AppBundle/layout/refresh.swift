@@ -88,7 +88,9 @@ func runHeavyCompleteRefreshSession(
         }
     }
     switch res {
-        case .success(()): schedulePersistentWorldSave()
+        case .success(()):
+            schedulePersistentWorldSave()
+            if shouldLayoutWorkspaces { raiseFloatingWindowsIfCovered() }
         case .failure(let err as CancellationError): check(assumeCancellable, "Non cancellable refresh session was canceled: \(err) (\(type(of: err)))")
         case .failure(let err): die("Illegal error: \(err)")
     }

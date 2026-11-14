@@ -42,7 +42,9 @@ Option mapping, `alt` means the **physical Command key**.
 | Ctrl+Minus | Type an em dash |
 
 Only st and vimbrowser windows tile. Every other window floats at its own
-size and position (`[[on-window-detected]]` rules at the end of the TOML).
+size and position (`[[on-window-detected]]` rules at the end of the TOML). The fork's
+`floating-windows-on-top` keeps floating windows in front of tiling windows,
+even when a tiling window is focused.
 
 ## Restore
 
