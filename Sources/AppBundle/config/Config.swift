@@ -47,6 +47,7 @@ struct Config: ConvenienceMutable {
     var accordionPadding: Int = 30
     var enableNormalizationOppositeOrientationForNestedContainers: Bool = true
     var horizontalTilingOnly: Bool = false
+    var floatingWindowsOnTop: Bool = false
     var persistentWorkspaces: OrderedSet<String> = []
     var execOnWorkspaceChange: [String] = [] // todo deprecate
     var keyMapping = KeyMapping()

@@ -144,6 +144,7 @@ final class MacWindow: Window {
     override func isMacosMinimized(_ cm: CancellationMode) async throws -> Bool { try await macApp.isMacosNativeMinimized(windowId, cm) == true }
 
     @MainActor override func nativeFocus() {
+        if shouldFocusWithoutRaise(self), macApp.nativeFocusWithoutRaise(windowId) { return }
         macApp.nativeFocus(windowId)
     }
 
