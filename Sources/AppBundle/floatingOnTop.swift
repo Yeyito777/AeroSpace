@@ -12,8 +12,11 @@ import Common
 
 private let clock = ContinuousClock()
 
-/// How long native focus changes to the raised windows' apps are taken for AeroSpace's own after a raise
-private let raiseFocusProtection: Duration = .milliseconds(300)
+/// How long native focus changes to the raised windows' apps are still taken for AeroSpace's own after a raise
+private let raiseFocusProtection: Duration = .milliseconds(100)
+/// After a raise, the keyboard is taken back from a raised app that activates itself again, for 6 × 50 ms
+private let keyboardGuardChecks = 6
+private let keyboardGuardInterval: Duration = .milliseconds(50)
 /// A raise that didn't fix the order isn't retried for the same windows for this long
 private let failedRaiseBackoff: Duration = .seconds(2)
 
@@ -87,28 +90,51 @@ private func overlapArea(_ a: CGRect, _ b: CGRect) -> CGFloat {
     let windows = windowIds.compactMap { Window.get(byId: $0) as? MacWindow }
     raisingAppPids = Set(windows.map(\.app.pid))
     FocusTrace.log("raising floating windows \(windowIds) over tiling windows, focus \(focused.traceDescription)")
+    let raiseStart = clock.now
     raiseTask = Task.startUnstructured { @MainActor in
         await raise(windows)
         // The focus may have changed meanwhile
-        let target = (focus.windowOrNil as? MacWindow) ?? focused
-        let restored = setFrontProcess(pid: target.app.pid, windowId: target.windowId, mode: cpsUserGenerated | cpsNoWindows) &&
-            makeKeyWindowWithoutRaise(pid: target.app.pid, windowId: target.windowId)
-        raiseProtectionEnd = clock.now.advanced(by: raiseFocusProtection)
-        raiseTask = nil
+        var target = (focus.windowOrNil as? MacWindow) ?? focused
+        let restored = giveKeyboardWithoutRaise(to: target)
+        // Some apps activate themselves again a few ms after the raise (cbang). Without a click from the user, that's
+        // still the raise: the keyboard goes back
+        var reasserted = 0
+        for _ in 0 ..< keyboardGuardChecks {
+            try? await Task.sleep(for: keyboardGuardInterval)
+            if let lastLeftMouseUp, lastLeftMouseUp > raiseStart { break }
+            target = (focus.windowOrNil as? MacWindow) ?? target
+            let frontmostPid = NSWorkspace.shared.frontmostApplication?.processIdentifier
+            if let frontmostPid, frontmostPid != target.app.pid, raisingAppPids.contains(frontmostPid) {
+                _ = giveKeyboardWithoutRaise(to: target)
+                reasserted += 1
+            }
+        }
         let stillCovered = onScreenWindowStack().map {
             floatingWindowsToRaise(stack: $0.stack, floating: floating, tiling: tiling)
         } ?? []
-        if stillCovered.isEmpty {
-            failedRaise = nil
-        } else {
-            failedRaise = (windowIds, clock.now)
-        }
+        failedRaise = stillCovered.isEmpty ? nil : (windowIds, clock.now)
         FocusTrace.log("  raised; keyboard back to \(target.traceDescription) (\(restored ? "ok" : "failed"))" +
+            (reasserted == 0 ? "" : ", taken back \(reasserted)x from a raised app") +
             (stillCovered.isEmpty ? "" : ", still covered: \(stillCovered)"))
-        // Reconcile a native focus change that the protection hid, e.g. a click right after the raise
+        raiseProtectionEnd = clock.now.advanced(by: raiseFocusProtection)
+        raiseTask = nil
+        // Reconcile a native focus change that the protection hid, e.g. a click on a floating window meanwhile
         try? await Task.sleep(for: raiseFocusProtection)
         scheduleCancellableCompleteRefreshSession(.floatingWindowsRaised)
     }
+}
+
+@MainActor
+private func giveKeyboardWithoutRaise(to window: MacWindow) -> Bool {
+    setFrontProcess(pid: window.app.pid, windowId: window.windowId, mode: cpsUserGenerated | cpsNoWindows) &&
+        makeKeyWindowWithoutRaise(pid: window.app.pid, windowId: window.windowId)
+}
+
+@MainActor private var lastLeftMouseUp: ContinuousClock.Instant? = nil
+
+/// A click during a raise is the user's: see raiseFloatingWindowsIfCovered
+@MainActor func noteLeftMouseUpForFloatingWindows() {
+    lastLeftMouseUp = clock.now
 }
 
 @MainActor

@@ -65,6 +65,7 @@ enum GlobalObserver {
             //  resetManipulatedWithMouseIfPossible might call its own refreshSession
             //  The end of the callback calls refreshSession
             Task.startUnstructured { @MainActor in
+                noteLeftMouseUpForFloatingWindows()
                 // A click can intentionally activate another app, including one
                 // on a different workspace.  It supersedes keyboard/CLI workspace
                 // and window close protection and should be reconciled normally.
